@@ -3472,9 +3472,11 @@ async function initApp() {
 // ── FORNECEDORES / QUALIFICAÇÃO ───────────────────────────────────────────────
 let _fornecedores = [];
 let _conferencias = []; // local store for delivery confirmations
+window._fornecedores = _fornecedores; // expõe para o patch OC
 
 async function loadFornecedoresData() {
   _fornecedores = await gsGetAll('fornecedores', true);
+  window._fornecedores = _fornecedores; // mantém sincronizado
   _conferencias = await gsGetAll('conf_entregas', true);
 }
 
@@ -3494,7 +3496,7 @@ function salvarFornecedor() {
   };
   showLoading('Cadastrando fornecedor...');
   gsInsert('fornecedores',row).then(()=>{
-    gsCache['fornecedores']=null;
+    gsCache['fornecedores']=null; window._fornecedores=[];
     _fornecedores=[];
     hideLoading();
     toast('✅ Fornecedor cadastrado!');
@@ -3622,7 +3624,7 @@ async function salvarEdicaoFornecedor() {
     ratingFin:document.getElementById('edit-rat-fin').value,
     ratingQual:document.getElementById('edit-rat-qual').value,
     ratingPrazo:document.getElementById('edit-rat-prazo').value});
-  gsCache['fornecedores']=null; _fornecedores=[];
+  gsCache['fornecedores']=null; _fornecedores=[]; window._fornecedores=[];
   hideLoading(); closeModal('modal-edit-sup'); toast('✅ Fornecedor atualizado!');
   renderFornecedoresRanking(); renderFornecedoresList(); populateSupplierSelects();
 }
@@ -3631,7 +3633,7 @@ async function excluirFornecedor(id) {
   if(!confirm('Excluir este fornecedor?')) return;
   showLoading('Excluindo...');
   await gsDelete('fornecedores',id);
-  gsCache['fornecedores']=null; _fornecedores=[];
+  gsCache['fornecedores']=null; _fornecedores=[]; window._fornecedores=[];
   hideLoading(); toast('Fornecedor removido.');
   renderFornecedoresRanking(); renderFornecedoresList(); populateSupplierSelects();
 }
@@ -4105,7 +4107,7 @@ async function _penalizarFornecedorDivergencia(fornecedorNome, numProblemas){
       ratingQual: novaQual,
       ratingPrazo: novaPrazo
     });
-    gsCache['fornecedores']=null; _fornecedores=[];
+    gsCache['fornecedores']=null; _fornecedores=[]; window._fornecedores=[];
     console.log(`Fornecedor ${fornecedorNome} penalizado: Qual ${novaQual}, Prazo ${novaPrazo}`);
   } catch(e){ console.warn('Penalização fornecedor falhou:', e); }
 }
@@ -4879,12 +4881,12 @@ function adicionarModalOC() {
 let _ocItensTemp = [];
 let _ocEditingId = null;
 
-window.abrirModalNovaOC = function() {
+window.abrirModalNovaOC = async function() {
   _ocItensTemp = [];
   _ocEditingId = null;
-  // Garante que fornecedores estão carregados antes de abrir o modal
+  // Garante que fornecedores estão carregados ANTES de abrir o modal
   if (!window._fornecedores || window._fornecedores.length === 0) {
-    if (window.loadFornecedoresData) window.loadFornecedoresData();
+    if (window.loadFornecedoresData) await window.loadFornecedoresData();
   }
   document.getElementById('oc-modal-title').textContent = '🗂️ Nova Ordem de Compra';
   document.getElementById('oc-edit-id').value = '';
@@ -4920,7 +4922,8 @@ window.searchFornOC = function() {
   const q = document.getElementById('oc-forn').value.toLowerCase().trim();
   const sug = document.getElementById('oc-forn-sug');
   if (q.length < 1) { sug.style.display = 'none'; return; }
-  const nomes = (window._fornecedores || []);
+  // Usa window._fornecedores (sincronizado com _fornecedores do app principal)
+  const nomes = (window._fornecedores || _fornecedores || []);
   const filtrados = nomes.filter(f => (f.name||'').toLowerCase().includes(q)).slice(0, 8);
   // Também busca em histórico de NFs
   const extra = (window.nfHistory || [])
@@ -4945,7 +4948,7 @@ window.selecionarFornOC = function(id, nome, email) {
   document.getElementById('oc-forn-email').value = email;
   document.getElementById('oc-forn-sug').style.display = 'none';
   // Preenche CNPJ, telefone e contato do cadastro de fornecedores
-  const sup = (window._fornecedores || []).find(f => f.id === id || f.name === nome);
+  const sup = (window._fornecedores || _fornecedores || []).find(f => f.id === id || f.name === nome);
   if (sup) {
     const cnpjEl  = document.getElementById('oc-forn-cnpj');
     const phoneEl = document.getElementById('oc-forn-phone');
@@ -5605,9 +5608,13 @@ window.filtrarOCs = function() {
   renderOCPage();
 };
 
-window.editarOC = function(id) {
+window.editarOC = async function(id) {
   const oc = window._ocList.find(x => x.id === id);
   if (!oc) return;
+  // Garante fornecedores carregados
+  if (!window._fornecedores || window._fornecedores.length === 0) {
+    if (window.loadFornecedoresData) await window.loadFornecedoresData();
+  }
   _ocEditingId = id;
   _ocItensTemp = JSON.parse(JSON.stringify(oc.itens || []));
   document.getElementById('oc-modal-title').textContent = '✏️ Editar Ordem de Compra';
