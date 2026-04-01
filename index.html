@@ -4692,14 +4692,14 @@ function adicionarModalOC() {
       <input type="hidden" id="oc-edit-id">
 
       <!-- Cabeçalho da OC -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">
         <div class="form-group">
           <label class="form-label">Número da OC</label>
           <input class="form-input" id="oc-numero" placeholder="Gerado automaticamente" readonly style="opacity:0.7">
         </div>
         <div class="form-group" style="position:relative">
           <label class="form-label">Fornecedor *</label>
-          <input class="form-input" id="oc-forn" placeholder="Nome do fornecedor" oninput="searchFornOC()" autocomplete="off">
+          <input class="form-input" id="oc-forn" placeholder="Digite para buscar..." oninput="searchFornOC()" autocomplete="off">
           <input type="hidden" id="oc-forn-id">
           <input type="hidden" id="oc-forn-email">
           <input type="hidden" id="oc-forn-cnpj">
@@ -4710,6 +4710,21 @@ function adicionarModalOC() {
         <div class="form-group">
           <label class="form-label">Data da OC</label>
           <input class="form-input" type="date" id="oc-data">
+        </div>
+      </div>
+      <!-- Dados do fornecedor (preenchidos automaticamente) -->
+      <div id="oc-forn-dados" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">
+        <div class="form-group" style="margin:0">
+          <label class="form-label" style="font-size:0.72rem">CNPJ</label>
+          <input class="form-input" id="oc-forn-cnpj-vis" placeholder="—" readonly style="opacity:0.8;font-size:0.85rem">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label" style="font-size:0.72rem">Telefone</label>
+          <input class="form-input" id="oc-forn-phone-vis" placeholder="—" readonly style="opacity:0.8;font-size:0.85rem">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label" style="font-size:0.72rem">Contato</label>
+          <input class="form-input" id="oc-forn-contato-vis" placeholder="—" readonly style="opacity:0.8;font-size:0.85rem">
         </div>
       </div>
 
@@ -4867,12 +4882,22 @@ let _ocEditingId = null;
 window.abrirModalNovaOC = function() {
   _ocItensTemp = [];
   _ocEditingId = null;
+  // Garante que fornecedores estão carregados antes de abrir o modal
+  if (!window._fornecedores || window._fornecedores.length === 0) {
+    if (window.loadFornecedoresData) window.loadFornecedoresData();
+  }
   document.getElementById('oc-modal-title').textContent = '🗂️ Nova Ordem de Compra';
   document.getElementById('oc-edit-id').value = '';
   document.getElementById('oc-numero').value = gerarNumOC();
   document.getElementById('oc-forn').value = '';
   document.getElementById('oc-forn-id').value = '';
   document.getElementById('oc-forn-email').value = '';
+  document.getElementById('oc-forn-cnpj').value = '';
+  document.getElementById('oc-forn-phone').value = '';
+  document.getElementById('oc-forn-contato').value = '';
+  ['oc-forn-cnpj-vis','oc-forn-phone-vis','oc-forn-contato-vis'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
   document.getElementById('oc-data').value = new Date().toISOString().split('T')[0];
   document.getElementById('oc-cond-pgto').value = '';
   document.getElementById('oc-cond-outra').value = '';
@@ -4928,6 +4953,18 @@ window.selecionarFornOC = function(id, nome, email) {
     if (cnpjEl)  cnpjEl.value  = sup.cnpj    || '';
     if (phoneEl) phoneEl.value = sup.phone   || '';
     if (contEl)  contEl.value  = sup.contato || '';
+    // Campos visíveis
+    const cv = document.getElementById('oc-forn-cnpj-vis');
+    const pv = document.getElementById('oc-forn-phone-vis');
+    const tv = document.getElementById('oc-forn-contato-vis');
+    if (cv) cv.value = sup.cnpj    || '—';
+    if (pv) pv.value = sup.phone   || '—';
+    if (tv) tv.value = sup.contato || '—';
+  } else {
+    // Limpa visíveis se não achou cadastro
+    ['oc-forn-cnpj-vis','oc-forn-phone-vis','oc-forn-contato-vis'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '—';
+    });
   }
 };
 
@@ -5558,6 +5595,7 @@ window.renderOCPage = function() {
         <button class="btn btn-sm btn-secondary" onclick="downloadPDFOC('${oc.id}')">⬇️ PDF</button>
         <button class="btn btn-sm btn-primary" onclick="enviarOCFornecedor('${oc.id}')">📤 Enviar</button>
         ${oc.status !== 'cancelada' ? `<button class="btn btn-sm btn-danger" onclick="cancelarOC('${oc.id}')">🚫 Cancelar</button>` : ''}
+        <button class="btn btn-sm btn-danger" style="opacity:0.7" onclick="excluirOC('${oc.id}')">🗑️ Excluir</button>
       </div>
     </div>
   `).join('');
@@ -5581,6 +5619,12 @@ window.editarOC = function(id) {
   document.getElementById('oc-forn-cnpj').value = oc.forn_cnpj || '';
   document.getElementById('oc-forn-phone').value = oc.forn_phone || '';
   document.getElementById('oc-forn-contato').value = oc.forn_contato || '';
+  const _cv = document.getElementById('oc-forn-cnpj-vis');
+  const _pv = document.getElementById('oc-forn-phone-vis');
+  const _tv = document.getElementById('oc-forn-contato-vis');
+  if (_cv) _cv.value = oc.forn_cnpj    || '';
+  if (_pv) _pv.value = oc.forn_phone   || '';
+  if (_tv) _tv.value = oc.forn_contato || '';
   document.getElementById('oc-data').value = oc.data || '';
   const condPgto = document.getElementById('oc-cond-pgto');
   const opcoes = Array.from(condPgto.options).map(o => o.value);
@@ -5609,6 +5653,14 @@ window.cancelarOC = function(id) {
   if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
   renderOCPage();
   if (window.toast) window.toast('OC cancelada.', 'warning');
+};
+
+window.excluirOC = function(id) {
+  if (!confirm('Excluir esta OC permanentemente? Esta ação não pode ser desfeita.')) return;
+  window._ocList = (window._ocList || []).filter(x => x.id !== id);
+  if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+  renderOCPage();
+  if (window.toast) window.toast('OC excluída.', 'danger');
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
