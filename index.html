@@ -4515,8 +4515,8 @@ function toast(msg, type='success') {
  *  5. E-mail de divergência garantido para fornecedores cadastrados
  *
  *  COMO APLICAR:
- *  Adicione <script src="PATCH_VILANOVA.js"></script> antes de </body>
- *  OU copie todo o conteúdo dentro de uma tag <script> no final do HTML
+ *  Adicione a tag script com PATCH_VILANOVA.js antes de fechar o body
+ *  OU copie todo o conteúdo dentro de uma tag script no final do HTML
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -4557,18 +4557,25 @@ function aplicarRenomeacoes() {
   const origNavTo = window.navTo;
   if (origNavTo && !origNavTo._patched) {
     window.navTo = function(page, el) {
+      if (page === 'oc') {
+        // Gerencia navegação para OC manualmente (origNavTo não conhece esta page)
+        // Remove active de todas as pages e nav-items
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        const pageOC = document.getElementById('page-oc');
+        if (pageOC) pageOC.classList.add('active');
+        if (el) el.classList.add('active');
+        const t = document.getElementById('page-title');
+        if (t) t.textContent = 'Ordem de Compra';
+        const topbar = document.getElementById('topbar-actions');
+        if (topbar) topbar.innerHTML = `<button class="btn btn-primary" onclick="abrirModalNovaOC()">+ Nova OC</button>`;
+        renderOCPage();
+        return;
+      }
       origNavTo(page, el);
       if (page === 'orders') {
         const t = document.getElementById('page-title');
         if (t) t.textContent = 'Pedido de Compra';
-      }
-      if (page === 'oc') {
-        renderOCPage();
-        const t = document.getElementById('page-title');
-        if (t) t.textContent = 'Ordem de Compra';
-        document.getElementById('topbar-actions').innerHTML = `
-          <button class="btn btn-primary" onclick="abrirModalNovaOC()">+ Nova OC</button>
-        `;
       }
     };
     window.navTo._patched = true;
