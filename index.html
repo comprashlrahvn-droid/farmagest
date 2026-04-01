@@ -229,6 +229,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
       <div class="form-row">
         <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="edit-sup-phone"></div>
         <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" id="edit-sup-cnpj" placeholder="00.000.000/0001-00" oninput="applyCNPJMask(this)"></div>
+        <div class="form-group"><label class="form-label">Contato (nome)</label><input class="form-input" id="edit-sup-contato" placeholder="Nome do contato"></div>
       </div>
       <div class="section-title" style="margin-top:12px;">⭐ Qualificação</div>
       <div class="rating-sliders">
@@ -826,6 +827,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
           <div class="form-row">
             <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="sup-phone" placeholder="(51) 99999-9999"></div>
             <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" id="sup-cnpj" placeholder="00.000.000/0001-00" oninput="applyCNPJMask(this)"></div>
+            <div class="form-group"><label class="form-label">Contato (nome)</label><input class="form-input" id="sup-contato" placeholder="Nome do contato"></div>
           </div>
           <div class="section-title" style="margin-top:16px;">⭐ Qualificação Inicial</div>
           <div class="rating-sliders" style="max-width:500px;">
@@ -3484,6 +3486,7 @@ function salvarFornecedor() {
   const row={
     id:'f_'+Date.now(), name, email, phone,
     cnpj:document.getElementById('sup-cnpj').value.trim(),
+    contato:document.getElementById('sup-contato')?.value.trim()||'',
     ratingAtend:document.getElementById('sup-rat-atend').value,
     ratingFin:document.getElementById('sup-rat-fin').value,
     ratingQual:document.getElementById('sup-rat-qual').value,
@@ -3599,6 +3602,7 @@ function abrirEditFornecedor(id) {
   document.getElementById('edit-sup-email').value=s.email||'';
   document.getElementById('edit-sup-phone').value=s.phone||'';
   document.getElementById('edit-sup-cnpj').value=s.cnpj||'';
+  if(document.getElementById('edit-sup-contato')) document.getElementById('edit-sup-contato').value=s.contato||'';
   const set=(elId,val)=>{const el=document.getElementById(elId);if(el){el.value=val||5;el.nextElementSibling.textContent=el.value;}};
   set('edit-rat-atend',s.ratingAtend); set('edit-rat-fin',s.ratingFin);
   set('edit-rat-qual',s.ratingQual); set('edit-rat-prazo',s.ratingPrazo);
@@ -3613,6 +3617,7 @@ async function salvarEdicaoFornecedor() {
   showLoading('Salvando...');
   await gsUpdate('fornecedores',id,{name,email,phone:document.getElementById('edit-sup-phone').value,
     cnpj:document.getElementById('edit-sup-cnpj').value.trim(),
+    contato:document.getElementById('edit-sup-contato')?.value.trim()||'',
     ratingAtend:document.getElementById('edit-rat-atend').value,
     ratingFin:document.getElementById('edit-rat-fin').value,
     ratingQual:document.getElementById('edit-rat-qual').value,
@@ -4697,6 +4702,9 @@ function adicionarModalOC() {
           <input class="form-input" id="oc-forn" placeholder="Nome do fornecedor" oninput="searchFornOC()" autocomplete="off">
           <input type="hidden" id="oc-forn-id">
           <input type="hidden" id="oc-forn-email">
+          <input type="hidden" id="oc-forn-cnpj">
+          <input type="hidden" id="oc-forn-phone">
+          <input type="hidden" id="oc-forn-contato">
           <div id="oc-forn-sug" style="position:absolute;top:100%;left:0;right:0;z-index:300;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;display:none;"></div>
         </div>
         <div class="form-group">
@@ -4911,6 +4919,16 @@ window.selecionarFornOC = function(id, nome, email) {
   document.getElementById('oc-forn-id').value = id;
   document.getElementById('oc-forn-email').value = email;
   document.getElementById('oc-forn-sug').style.display = 'none';
+  // Preenche CNPJ, telefone e contato do cadastro de fornecedores
+  const sup = (window._fornecedores || []).find(f => f.id === id || f.name === nome);
+  if (sup) {
+    const cnpjEl  = document.getElementById('oc-forn-cnpj');
+    const phoneEl = document.getElementById('oc-forn-phone');
+    const contEl  = document.getElementById('oc-forn-contato');
+    if (cnpjEl)  cnpjEl.value  = sup.cnpj    || '';
+    if (phoneEl) phoneEl.value = sup.phone   || '';
+    if (contEl)  contEl.value  = sup.contato || '';
+  }
 };
 
 // Fecha sugestão ao clicar fora
@@ -5109,6 +5127,9 @@ function coletarDadosOC() {
     fornecedor: document.getElementById('oc-forn').value.trim(),
     forn_id: document.getElementById('oc-forn-id').value,
     forn_email: document.getElementById('oc-forn-email').value,
+    forn_cnpj: document.getElementById('oc-forn-cnpj').value,
+    forn_phone: document.getElementById('oc-forn-phone').value,
+    forn_contato: document.getElementById('oc-forn-contato').value,
     data: document.getElementById('oc-data').value,
     cond_pgto: condPgto === 'Outra' ? condOutra : condPgto,
     prev_entrega: document.getElementById('oc-prev-entrega').value,
@@ -5152,23 +5173,35 @@ function salvarOC(oc) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function gerarHTMLOC(oc) {
+  // Busca dados atualizados do fornecedor no cadastro
+  const supCad = (window._fornecedores || []).find(f => f.id === oc.forn_id || f.name === oc.fornecedor);
+  const cnpj      = oc.forn_cnpj  || supCad?.cnpj  || '';
+  const phone     = oc.forn_phone || supCad?.phone  || '';
+  const email     = oc.forn_email || supCad?.email  || '';
+  const contato   = oc.forn_contato || supCad?.contato || '';
+
   const itensRows = oc.itens.map((it, i) => `
-    <tr style="border-bottom:1px solid #e5e7eb;${i%2===0?'background:#f9fafb':''}">
-      <td style="padding:8px 12px;font-size:13px">${i+1}</td>
-      <td style="padding:8px 12px;font-size:13px">${it.codigo || '—'}</td>
-      <td style="padding:8px 12px;font-size:13px"><b>${it.descricao}</b></td>
-      <td style="padding:8px 12px;text-align:center;font-size:13px">${it.quantidade}</td>
-      <td style="padding:8px 12px;text-align:center;font-size:13px">${it.unidade}</td>
-      <td style="padding:8px 12px;text-align:right;font-size:13px">${it.valor_unit > 0 ? fmtBRL(it.valor_unit) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-size:13px;font-weight:700">${it.valor_total > 0 ? fmtBRL(it.valor_total) : '—'}</td>
+    <tr style="${i % 2 === 0 ? 'background:#f9fafb' : ''}">
+      <td style="padding:7px 10px;font-size:12.5px">${it.codigo || ''}</td>
+      <td style="padding:7px 10px;font-size:12.5px">${it.descricao}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:12.5px">${it.quantidade}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:12.5px">R$</td>
+      <td style="padding:7px 10px;text-align:right;font-size:12.5px">${it.valor_unit > 0 ? Number(it.valor_unit).toLocaleString('pt-BR',{minimumFractionDigits:2}) : ''}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:12.5px">R$</td>
+      <td style="padding:7px 10px;text-align:right;font-size:12.5px;font-weight:600">${it.valor_total > 0 ? Number(it.valor_total).toLocaleString('pt-BR',{minimumFractionDigits:2}) : ''}</td>
     </tr>
   `).join('');
 
-  const acrescimos = [];
-  if (oc.frete > 0) acrescimos.push(`<tr><td colspan="5"></td><td style="padding:5px 12px;text-align:right;font-size:13px;color:#6b7280">Frete:</td><td style="padding:5px 12px;text-align:right;font-size:13px">${fmtBRL(oc.frete)}</td></tr>`);
-  if (oc.ipi_pct > 0) acrescimos.push(`<tr><td colspan="5"></td><td style="padding:5px 12px;text-align:right;font-size:13px;color:#6b7280">IPI (${oc.ipi_pct}%):</td><td style="padding:5px 12px;text-align:right;font-size:13px">${fmtBRL(oc.ipi_val)}</td></tr>`);
-  if (oc.desconto_pct > 0) acrescimos.push(`<tr><td colspan="5"></td><td style="padding:5px 12px;text-align:right;font-size:13px;color:#16a34a">Desconto (${oc.desconto_pct}%):</td><td style="padding:5px 12px;text-align:right;font-size:13px;color:#16a34a">−${fmtBRL(oc.desconto_val)}</td></tr>`);
-  if (oc.outros > 0) acrescimos.push(`<tr><td colspan="5"></td><td style="padding:5px 12px;text-align:right;font-size:13px;color:#6b7280">Outros:</td><td style="padding:5px 12px;text-align:right;font-size:13px">${fmtBRL(oc.outros)}</td></tr>`);
+  const sub = oc.subtotal || 0;
+  const frete = oc.frete || 0;
+  const ipiVal = oc.ipi_val || 0;
+  const descVal = oc.desconto_val || 0;
+  const total = oc.total || 0;
+  const fmtR = v => 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  const acrescimoLabel = [];
+  if (frete > 0 || ipiVal > 0) acrescimoLabel.push('FRETE/IPI');
+  const acrescimoVal = frete + ipiVal;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -5176,108 +5209,149 @@ function gerarHTMLOC(oc) {
 <meta charset="UTF-8">
 <title>OC ${oc.numero}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; color: #111; background: #fff; }
-  .page { max-width: 840px; margin: 0 auto; padding: 40px 40px 60px; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; border-bottom: 3px solid #1a5c38; padding-bottom: 20px; }
-  .logo-area h1 { font-size: 22px; font-weight: 900; color: #1a5c38; letter-spacing: -0.5px; }
-  .logo-area p { font-size: 12px; color: #6b7280; margin-top: 2px; }
-  .oc-id { text-align: right; }
-  .oc-id .num { font-size: 20px; font-weight: 800; color: #1a5c38; }
-  .oc-id .lbl { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
-  .section { margin-bottom: 24px; }
-  .section-title { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
-  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-  .info-item label { font-size: 11px; color: #9ca3af; display: block; margin-bottom: 2px; }
-  .info-item span { font-size: 13px; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; }
-  thead th { background: #1a5c38; color: white; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 600; }
-  .total-row td { font-weight: 800; font-size: 15px; border-top: 2px solid #1a5c38; padding: 10px 12px; }
-  .footer { margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 11px; color: #9ca3af; text-align: center; }
-  .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; }
-  .ass-linha { border-top: 1px solid #374151; padding-top: 6px; font-size: 11px; color: #6b7280; text-align: center; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family: Arial, sans-serif; font-size:13px; color:#111; background:#fff; }
+  .page { max-width:800px; margin:0 auto; padding:30px 36px 50px; }
+
+  /* Cabeçalho */
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; }
+  .header-right { text-align:right; }
+  .header-right h1 { font-size:22px; font-weight:900; color:#111; }
+  .header-right .addr { font-size:11.5px; color:#444; line-height:1.6; }
+
+  /* Seção label */
+  .sec-label { font-weight:700; font-size:12px; border-bottom:1.5px solid #111; padding:3px 0; margin:14px 0 8px; text-transform:uppercase; }
+
+  /* Grid 2 colunas info */
+  .info-row { display:flex; gap:0; margin-bottom:4px; }
+  .info-cell { flex:1; }
+  .info-cell label { font-weight:700; font-size:11.5px; display:inline; }
+  .info-cell span { font-size:12px; }
+
+  /* Tabela itens */
+  table.items { width:100%; border-collapse:collapse; border:1px solid #999; margin-top:6px; }
+  table.items thead th { background:#fff; border:1px solid #999; padding:6px 8px; font-size:12px; font-weight:700; text-align:left; }
+  table.items tbody td { border:1px solid #ccc; }
+  table.items tfoot td { border:1px solid #999; padding:6px 8px; font-size:12.5px; }
+
+  /* Totais */
+  .totals-table { width:100%; border-collapse:collapse; margin-top:0; }
+  .totals-table td { padding:4px 8px; font-size:12.5px; }
+
+  /* Condições */
+  .bottom-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; border:1px solid #999; }
+  .bottom-left { padding:10px 12px; border-right:1px solid #999; }
+  .bottom-right { padding:10px 12px; }
+  .bottom-row { margin-bottom:5px; font-size:12px; }
+  .bottom-row label { font-weight:700; }
+
+  .comprador { text-align:center; font-weight:700; font-size:12.5px; margin-top:22px; }
+
+  @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
 </style>
 </head>
 <body>
 <div class="page">
+
   <!-- CABEÇALHO -->
   <div class="header">
-    <div class="logo-area">
-      <h1>🏥 A.H. Vila Nova</h1>
-      <p>Gestão de Estoque Farmacêutico</p>
-      <p>CNPJ: __________________</p>
+    <div class="logo-area" style="max-width:220px">
+      <img src="https://www.ahvilanova.com.br/wp-content/uploads/2020/09/logo-vila-nova.png"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+           style="max-width:180px;max-height:80px;object-fit:contain">
+      <div style="display:none;font-size:18px;font-weight:900;color:#1a5c38">A.H. Vila Nova</div>
     </div>
-    <div class="oc-id">
-      <div class="lbl">Ordem de Compra</div>
-      <div class="num">${oc.numero}</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:4px">Data: ${formatarData(oc.data)}</div>
-    </div>
-  </div>
-
-  <!-- FORNECEDOR -->
-  <div class="section">
-    <div class="section-title">Dados do Fornecedor</div>
-    <div class="info-grid">
-      <div class="info-item"><label>Fornecedor</label><span>${oc.fornecedor || '—'}</span></div>
-      <div class="info-item"><label>E-mail</label><span>${oc.forn_email || '—'}</span></div>
-      <div class="info-item"><label>Condição de Pagamento</label><span>${oc.cond_pgto || '—'}</span></div>
+    <div class="header-right">
+      <h1>Ordem de Compra</h1>
+      <div class="addr">
+        Associação Hospitalar Vila Nova<br>
+        CNPJ: 04.994.418/0009-70<br>
+        Rua Osvaldo Cruz, 116, Bela Vista<br>
+        Cep: 93704-814 - Campo Bom - RS<br>
+        TEL: (51) 31913602
+      </div>
     </div>
   </div>
 
-  <!-- ENTREGA -->
-  <div class="section">
-    <div class="section-title">Informações de Entrega</div>
-    <div class="info-grid">
-      <div class="info-item"><label>Previsão de Entrega</label><span>${oc.prev_entrega ? formatarData(oc.prev_entrega) : '—'}</span></div>
-      <div class="info-item"><label>Emitida por</label><span>${oc.criado_por || '—'}</span></div>
-      <div class="info-item"><label>Data de Emissão</label><span>${formatarData(oc.data)}</span></div>
+  <!-- DEPARTAMENTO SOLICITANTE -->
+  <div class="sec-label">Departamento Solicitante</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px">
+    <div><label style="font-weight:700;font-size:11.5px">Nº R.C: </label><span style="font-size:12px">${oc.numero}</span></div>
+    <div><label style="font-weight:700;font-size:11.5px">Data: </label><span style="font-size:12px">${formatarData ? formatarData(oc.data) : oc.data}</span></div>
+    <div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+    <div><label style="font-weight:700;font-size:11.5px">Nome: </label><span style="font-size:12px">${oc.criado_por || ''}</span></div>
+    <div><label style="font-weight:700;font-size:11.5px">Centro de Custo: </label><span style="font-size:12px">FARMÁCIA</span></div>
+  </div>
+
+  <!-- INFORMAÇÕES DO FORNECEDOR -->
+  <div class="sec-label">Informações do Fornecedor</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px">
+    <div><label style="font-weight:700;font-size:11.5px">Empresa: </label><span style="font-size:12px">${oc.fornecedor || '—'}</span></div>
+    <div><label style="font-weight:700;font-size:11.5px">Nº CNPJ: </label><span style="font-size:12px">${cnpj || '—'}</span></div>
+    <div><label style="font-weight:700;font-size:11.5px">Contato: </label><span style="font-size:12px">${contato || '—'}</span></div>
+    <div><label style="font-weight:700;font-size:11.5px">Telefone: </label><span style="font-size:12px">${phone || '—'}</span></div>
+    <div style="grid-column:1/-1"><label style="font-weight:700;font-size:11.5px">Email: </label><span style="font-size:12px">${email || '—'}</span></div>
+  </div>
+
+  <!-- ITENS DO PEDIDO -->
+  <div class="sec-label">Itens do Pedido</div>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:90px">Código</th>
+        <th>Descrição</th>
+        <th style="width:55px;text-align:center">Qtd</th>
+        <th style="width:30px;text-align:right">  </th>
+        <th style="width:80px;text-align:right">R$ Uni</th>
+        <th style="width:30px;text-align:right">  </th>
+        <th style="width:90px;text-align:right">R$ Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itensRows}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5" style="text-align:right;border:none"></td>
+        <td colspan="2" style="text-align:right;border-top:1px solid #999;padding:5px 8px;font-size:12.5px">${fmtR(sub)}</td>
+      </tr>
+      ${descVal > 0 ? `<tr><td colspan="4" style="border:none"></td><td style="text-align:right;font-size:12.5px;border:none">Desconto:</td><td></td><td style="text-align:right;font-size:12.5px;color:#16a34a">−${fmtR(descVal)}</td></tr>` : ''}
+      ${acrescimoVal > 0 ? `<tr><td colspan="3" style="border:none"></td><td colspan="2" style="text-align:right;font-size:12.5px;border:none">${acrescimoLabel.join('/')}</td><td style="text-align:right;border:none"></td><td style="text-align:right;font-size:12.5px;border:none;padding:4px 8px">${fmtR(acrescimoVal)}</td></tr>` : ''}
+      <tr>
+        <td colspan="5" style="text-align:right;font-weight:700;font-size:13px;border:1px solid #999">Total:</td>
+        <td colspan="2" style="text-align:right;font-weight:700;font-size:13.5px;border:1px solid #999;padding:6px 8px">${fmtR(total)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- CONDIÇÕES DE PAGAMENTO / INFORMAÇÕES COMPLEMENTARES -->
+  <div class="bottom-grid">
+    <div class="bottom-left">
+      <div style="font-weight:700;font-size:12px;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:8px">Condições de Pagamento</div>
+      <div class="bottom-row"><label>Prazo Entrega: </label>${oc.prev_entrega ? formatarData(oc.prev_entrega) : '—'}</div>
+      <div class="bottom-row"><label>Forma de Pagamento: </label></div>
+      <div class="bottom-row"><label>Prazo de Pagamento: </label>${oc.cond_pgto || '—'}</div>
+      <div class="bottom-row"><label>Banco: </label></div>
+      <div class="bottom-row"><label>Agência: </label></div>
+      <div class="bottom-row"><label>Conta: </label></div>
+    </div>
+    <div class="bottom-right">
+      <div style="font-weight:700;font-size:12px;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:8px">Informações Complementares</div>
+      <div style="font-size:12px;line-height:1.8">
+        ENTREGA DE MERCADORIAS:<br>
+        SEGUNDA À SEXTA<br>
+        DAS 08:15h ÀS 11:30h DAS 13:15h ÀS 16:00h<br>
+        FUNDOS DO HOSPITAL, ACESSO JUNTO À RECEPÇÃO 3<br>
+        NÃO ENVIAR COM CAMINHÃO TRUCK E BI-TRUCK
+        ${oc.obs ? `<br><br><b>Obs:</b> ${oc.obs}` : ''}
+      </div>
     </div>
   </div>
 
-  <!-- ITENS -->
-  <div class="section">
-    <div class="section-title">Itens do Pedido</div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:40px">#</th>
-          <th style="width:100px">Código</th>
-          <th>Descrição</th>
-          <th style="width:70px;text-align:center">Qtd</th>
-          <th style="width:60px;text-align:center">Un</th>
-          <th style="width:100px;text-align:right">Vl. Unit.</th>
-          <th style="width:110px;text-align:right">Vl. Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itensRows}
-        ${acrescimos.join('')}
-        <tr class="total-row">
-          <td colspan="5"></td>
-          <td style="text-align:right;padding:10px 12px;font-size:13px">TOTAL GERAL:</td>
-          <td style="text-align:right;padding:10px 12px;font-size:15px;color:#1a5c38">${fmtBRL(oc.total || 0)}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <div class="comprador">COMPRADOR: JUNIOR GOLFETTO</div>
 
-  ${oc.obs ? `
-  <!-- OBSERVAÇÕES -->
-  <div class="section">
-    <div class="section-title">Observações</div>
-    <p style="font-size:13px;line-height:1.6;color:#374151;background:#f9fafb;padding:12px;border-radius:6px;border-left:3px solid #1a5c38">${oc.obs}</p>
-  </div>` : ''}
-
-  <!-- ASSINATURAS -->
-  <div class="assinaturas">
-    <div class="ass-linha">Responsável pelo Pedido</div>
-    <div class="ass-linha">Autorização / Aprovação</div>
-  </div>
-
-  <div class="footer">
-    Documento gerado em ${new Date().toLocaleString('pt-BR')} — Sistema Vila Nova
-  </div>
 </div>
 </body>
 </html>`;
@@ -5504,6 +5578,9 @@ window.editarOC = function(id) {
   document.getElementById('oc-forn').value = oc.fornecedor || '';
   document.getElementById('oc-forn-id').value = oc.forn_id || '';
   document.getElementById('oc-forn-email').value = oc.forn_email || '';
+  document.getElementById('oc-forn-cnpj').value = oc.forn_cnpj || '';
+  document.getElementById('oc-forn-phone').value = oc.forn_phone || '';
+  document.getElementById('oc-forn-contato').value = oc.forn_contato || '';
   document.getElementById('oc-data').value = oc.data || '';
   const condPgto = document.getElementById('oc-cond-pgto');
   const opcoes = Array.from(condPgto.options).map(o => o.value);
