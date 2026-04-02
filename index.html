@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root {
   --bg:#0d1f17;--surface:#122b1f;--surface2:#183826;--surface3:#1e4530;
@@ -5292,76 +5293,254 @@ async function _blobParaBase64(blob) {
  * - Usa allowtransparency=false e sandbox mínimo para evitar herança de estilos
  */
 async function _gerarPDFBlob(oc) {
-  // Extrai apenas o conteúdo do <body> do HTML da OC para injetar em um div isolado
-  const ocHtml = gerarHTMLOC(oc);
+  // Busca dados do fornecedor
+  const supCad  = (window._fornecedores || []).find(f => f.id === oc.forn_id || f.name === oc.fornecedor);
+  const cnpj    = oc.forn_cnpj    || supCad?.cnpj    || '';
+  const phone   = oc.forn_phone   || supCad?.phone   || '';
+  const emailF  = oc.forn_email   || supCad?.email   || '';
+  const contato = oc.forn_contato || supCad?.contato || '';
 
-  // Extrai o conteúdo entre <body> e </body> (incluindo estilos internos via <style> no <head>)
-  const styleMatch = ocHtml.match(/<style>([\s\S]*?)<\/style>/i);
-  const bodyMatch  = ocHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  const innerStyle = styleMatch ? styleMatch[1] : '';
-  const innerBody  = bodyMatch  ? bodyMatch[1]  : ocHtml;
+  const fmtR = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtD = d => { if(!d) return '—'; try{ const [y,m,dy]=d.split('-'); return `${dy}/${m}/${y}`; }catch(e){return d;} };
 
-  // Cria container isolado no DOM principal — html2pdf captura normalmente
-  const container = document.createElement('div');
-  container.style.cssText = [
-    'position:fixed',
-    'top:-19999px',
-    'left:-19999px',
-    'width:794px',
-    'background:#fff',
-    'color:#111',
-    'font-family:Arial,sans-serif',
-    'z-index:-1'
-  ].join(';');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
 
-  // Injeta os estilos da OC em um <style> scoped + o conteúdo do body
-  container.innerHTML = `<style>${innerStyle}</style>${innerBody}`;
-  document.body.appendChild(container);
+  const PW = 210; // largura A4 mm
+  const ML = 12, MR = 12, MT = 12;
+  let y = MT;
 
-  // Aguarda imagens carregarem (logo do hospital)
-  const imgs = Array.from(container.querySelectorAll('img'));
-  if (imgs.length) {
-    await Promise.race([
-      Promise.all(imgs.map(img => new Promise(r => {
-        if (img.complete && img.naturalWidth > 0) { r(); return; }
-        img.onload = img.onerror = r;
-      }))),
-      new Promise(r => setTimeout(r, 2500))
-    ]);
-  }
-  // Pausa extra para garantir renderização completa
-  await new Promise(r => setTimeout(r, 300));
+  // ── Funções auxiliares ──────────────────────────────────────────────────────
+  const setFont = (style='normal', size=10) => { doc.setFont('helvetica', style); doc.setFontSize(size); };
+  const txt = (text, x, yy, opts={}) => doc.text(String(text ?? ''), x, yy, opts);
+  const line = (x1,y1,x2,y2,w=0.3) => { doc.setLineWidth(w); doc.line(x1,y1,x2,y2); };
+  const rect = (x,yy,w,h,style='S') => { doc.setLineWidth(0.3); doc.rect(x,yy,w,h,style); };
 
-  const opt = {
-    margin:      [8, 8, 8, 8],
-    image:       { type: 'jpeg', quality: 0.97 },
-    html2canvas: {
-      scale:           2,
-      useCORS:         true,
-      logging:         false,
-      windowWidth:     794,
-      scrollY:         0,
-      backgroundColor: '#ffffff',
-      onclone: (clonedDoc) => {
-        clonedDoc.documentElement.style.cssText = 'background:#fff!important';
-        clonedDoc.body.style.cssText = 'background:#fff!important;color:#111!important;margin:0;padding:0';
-      }
-    },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  // ── LOGO + CABEÇALHO ────────────────────────────────────────────────────────
+  // Tenta carregar logo como imagem base64
+  try {
+    await new Promise((res) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+          cv.getContext('2d').drawImage(img, 0, 0);
+          const b64 = cv.toDataURL('image/png');
+          doc.addImage(b64, 'PNG', ML, y, 45, 18);
+        } catch(e) {}
+        res();
+      };
+      img.onerror = res;
+      setTimeout(res, 2500);
+      img.src = 'https://www.ahvilanova.com.br/wp-content/uploads/2020/09/logo-vila-nova.png';
+    });
+  } catch(e) {}
+
+  // Título + endereço à direita
+  setFont('bold', 16);
+  txt('Ordem de Compra', PW - MR, y + 5, {align:'right'});
+  setFont('normal', 8);
+  doc.setTextColor(80,80,80);
+  const addr = [
+    'Associação Hospitalar Vila Nova',
+    'CNPJ: 04.994.418/0009-70',
+    'Rua Osvaldo Cruz, 116, Bela Vista',
+    'CEP: 93704-814 — Campo Bom/RS',
+    'Tel: (51) 3191-3602'
+  ];
+  addr.forEach((l,i) => txt(l, PW - MR, y + 10 + i * 4, {align:'right'}));
+  doc.setTextColor(0,0,0);
+
+  y += 24;
+  line(ML, y, PW - MR, y, 0.5);
+
+  // ── DEPARTAMENTO SOLICITANTE ────────────────────────────────────────────────
+  y += 5;
+  setFont('bold', 8);
+  txt('DEPARTAMENTO SOLICITANTE', ML, y);
+  y += 1;
+  line(ML, y, PW - MR, y, 0.3);
+  y += 4;
+
+  setFont('bold', 8);  txt('Nº R.C:', ML, y);
+  setFont('normal', 8); txt(oc.numero || '', ML + 14, y);
+  setFont('bold', 8);  txt('Data:', ML + 70, y);
+  setFont('normal', 8); txt(fmtD(oc.data), ML + 80, y);
+  y += 5;
+  setFont('bold', 8);  txt('Nome:', ML, y);
+  setFont('normal', 8); txt(oc.criado_por || '', ML + 12, y);
+  setFont('bold', 8);  txt('Centro de Custo:', ML + 70, y);
+  setFont('normal', 8); txt('FARMÁCIA', ML + 97, y);
+
+  y += 6;
+  line(ML, y, PW - MR, y, 0.3);
+
+  // ── INFORMAÇÕES DO FORNECEDOR ───────────────────────────────────────────────
+  y += 5;
+  setFont('bold', 8);
+  txt('INFORMAÇÕES DO FORNECEDOR', ML, y);
+  y += 1;
+  line(ML, y, PW - MR, y, 0.3);
+  y += 4;
+
+  const col2 = ML + 95;
+  // Linha 1: Empresa + CNPJ
+  setFont('bold',8);   txt('Empresa:', ML, y);
+  setFont('normal',8); txt(oc.fornecedor || '—', ML + 17, y);
+  setFont('bold',8);   txt('CNPJ:', col2, y);
+  setFont('normal',8); txt(cnpj || '—', col2 + 11, y);
+  y += 5;
+  // Linha 2: Contato + Telefone
+  setFont('bold',8);   txt('Contato:', ML, y);
+  setFont('normal',8); txt(contato || '—', ML + 16, y);
+  setFont('bold',8);   txt('Telefone:', col2, y);
+  setFont('normal',8); txt(phone || '—', col2 + 18, y);
+  y += 5;
+  // Linha 3: Email
+  setFont('bold',8);   txt('Email:', ML, y);
+  setFont('normal',8); txt(emailF || '—', ML + 13, y);
+  y += 5;
+
+  y += 1;
+  line(ML, y, PW - MR, y, 0.3);
+
+  // ── ITENS DO PEDIDO ─────────────────────────────────────────────────────────
+  y += 5;
+  setFont('bold', 8);
+  txt('ITENS DO PEDIDO', ML, y);
+  y += 1;
+  line(ML, y, PW - MR, y, 0.3);
+  y += 4;
+
+  // Cabeçalho tabela
+  const tCols = [22, 80, 14, 22, 22]; // larguras: Código, Descrição, Qtd, R$ Uni, R$ Total
+  const tX    = [ML, ML+22, ML+102, ML+116, ML+138];
+  const tW    = PW - ML - MR; // 186mm
+
+  doc.setFillColor(240,240,240);
+  doc.rect(ML, y, tW, 6, 'F');
+  setFont('bold', 7.5);
+  txt('Código',     tX[0]+1, y+4);
+  txt('Descrição',  tX[1]+1, y+4);
+  txt('Qtd',        tX[2]+1, y+4, {align:'center'});
+  txt('R$ Unit',    tX[3]+20, y+4, {align:'right'});
+  txt('R$ Total',   tX[4]+20, y+4, {align:'right'});
+  rect(ML, y, tW, 6);
+  y += 6;
+
+  // Linhas de itens
+  setFont('normal', 7.5);
+  const rowH = 6;
+  oc.itens.forEach((it, i) => {
+    if (i % 2 === 0) { doc.setFillColor(249,250,251); doc.rect(ML, y, tW, rowH, 'F'); }
+    // Descrição pode ser longa — truncar
+    const descMaxW = 79;
+    let desc = it.descricao || '';
+    if (doc.getTextWidth(desc) > descMaxW) {
+      while (doc.getTextWidth(desc + '…') > descMaxW && desc.length > 0) desc = desc.slice(0,-1);
+      desc += '…';
+    }
+    txt(it.codigo || '', tX[0]+1, y+4);
+    txt(desc,            tX[1]+1, y+4);
+    txt(String(it.quantidade), tX[2]+7, y+4, {align:'center'});
+    setFont(it.valor_unit > 0 ? 'normal' : 'normal', 7.5);
+    txt(it.valor_unit > 0 ? Number(it.valor_unit).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '', tX[3]+20, y+4, {align:'right'});
+    setFont('bold', 7.5);
+    txt(it.valor_total > 0 ? Number(it.valor_total).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '', tX[4]+20, y+4, {align:'right'});
+    setFont('normal', 7.5);
+    rect(ML, y, tW, rowH);
+    y += rowH;
+  });
+
+  // Totais
+  const sub     = oc.subtotal || 0;
+  const frete   = oc.frete || 0;
+  const ipiVal  = oc.ipi_val || 0;
+  const descVal = oc.desconto_val || 0;
+  const total   = oc.total || 0;
+
+  const totX = tX[3] - 20;
+  const totW = tW - (totX - ML);
+
+  const addTotalRow = (label, value, bold=false, color=null) => {
+    if(color) doc.setTextColor(...color); else doc.setTextColor(0,0,0);
+    setFont(bold?'bold':'normal', 8);
+    txt(label, totX + totW - 45, y + 4, {align:'right'});
+    txt(value,  ML + tW - 1,     y + 4, {align:'right'});
+    doc.setTextColor(0,0,0);
+    y += 5;
   };
 
-  try {
-    const pdfBlob = await html2pdf()
-      .set(opt)
-      .from(container)
-      .outputPdf('blob');
+  y += 1;
+  addTotalRow('Subtotal:', fmtR(sub));
+  if(frete > 0) addTotalRow('Frete:', fmtR(frete));
+  if(ipiVal > 0) addTotalRow('IPI:', fmtR(ipiVal));
+  if(descVal > 0) addTotalRow('Desconto:', '− ' + fmtR(descVal), false, [22,163,74]);
 
-    document.body.removeChild(container);
-    return pdfBlob;
-  } catch(err) {
-    try { document.body.removeChild(container); } catch(e) {}
-    throw err;
-  }
+  // Linha total
+  doc.setFillColor(30, 69, 48);
+  doc.rect(ML + tW - 80, y, 80, 7, 'F');
+  doc.setTextColor(255,255,255);
+  setFont('bold', 9);
+  txt('TOTAL:', ML + tW - 45, y + 5, {align:'right'});
+  txt(fmtR(total), ML + tW - 1, y + 5, {align:'right'});
+  doc.setTextColor(0,0,0);
+  y += 10;
+
+  // ── CONDIÇÕES + INFORMAÇÕES COMPLEMENTARES ──────────────────────────────────
+  const boxY = y;
+  const boxH = 36;
+  const halfW = (tW - 4) / 2;
+
+  rect(ML, boxY, halfW, boxH);
+  rect(ML + halfW + 4, boxY, halfW, boxH);
+
+  setFont('bold', 8);
+  txt('Condições de Pagamento', ML + 2, boxY + 5);
+  line(ML, boxY + 7, ML + halfW, boxY + 7, 0.2);
+  setFont('normal', 7.5);
+  const conds = [
+    ['Prazo Entrega:', fmtD(oc.prev_entrega)],
+    ['Forma de Pagamento:', ''],
+    ['Prazo de Pagamento:', oc.cond_pgto || '—'],
+    ['Banco / Agência / Conta:', ''],
+  ];
+  conds.forEach(([l,v],i) => {
+    setFont('bold', 7.5);   txt(l, ML + 2, boxY + 12 + i * 5);
+    setFont('normal', 7.5); txt(v, ML + 2 + doc.getTextWidth(l) + 1, boxY + 12 + i * 5);
+  });
+
+  const cx = ML + halfW + 6;
+  setFont('bold', 8);
+  txt('Informações Complementares', cx, boxY + 5);
+  line(ML + halfW + 4, boxY + 7, ML + halfW + 4 + halfW, boxY + 7, 0.2);
+  setFont('normal', 7);
+  const infoLines = [
+    'ENTREGA: SEGUNDA À SEXTA',
+    '08:15h–11:30h e 13:15h–16:00h',
+    'FUNDOS DO HOSPITAL — RECEPÇÃO 3',
+    'NÃO ENVIAR COM CAMINHÃO TRUCK/BI-TRUCK',
+  ];
+  if (oc.obs) infoLines.push('Obs: ' + oc.obs);
+  infoLines.forEach((l,i) => txt(l, cx, boxY + 12 + i * 4.5));
+
+  y = boxY + boxH + 8;
+
+  // ── ASSINATURA ───────────────────────────────────────────────────────────────
+  setFont('bold', 8.5);
+  doc.setTextColor(30,69,48);
+  txt('COMPRADOR: JUNIOR GOLFETTO', PW/2, y, {align:'center'});
+  doc.setTextColor(0,0,0);
+
+  // ── RODAPÉ ───────────────────────────────────────────────────────────────────
+  setFont('normal', 7);
+  doc.setTextColor(150,150,150);
+  txt(`Documento gerado em ${new Date().toLocaleDateString('pt-BR')} — A.H. Vila Nova`, PW/2, 290, {align:'center'});
+  doc.setTextColor(0,0,0);
+
+  return doc.output('blob');
 }
 
 
