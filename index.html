@@ -5292,92 +5292,76 @@ async function _blobParaBase64(blob) {
  * - Usa allowtransparency=false e sandbox mínimo para evitar herança de estilos
  */
 async function _gerarPDFBlob(oc) {
+  // Extrai apenas o conteúdo do <body> do HTML da OC para injetar em um div isolado
   const ocHtml = gerarHTMLOC(oc);
 
-  return new Promise((resolve, reject) => {
-    // Cria iframe isolado com srcdoc — sem acesso ao CSS da página pai
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts');
-    iframe.style.cssText = [
-      'position:fixed',
-      'top:-19999px',
-      'left:-19999px',
-      'width:794px',      // A4 a 96dpi ≈ 794px
-      'height:1123px',    // A4 a 96dpi ≈ 1123px
-      'border:none',
-      'opacity:0',
-      'pointer-events:none'
-    ].join(';');
+  // Extrai o conteúdo entre <body> e </body> (incluindo estilos internos via <style> no <head>)
+  const styleMatch = ocHtml.match(/<style>([\s\S]*?)<\/style>/i);
+  const bodyMatch  = ocHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const innerStyle = styleMatch ? styleMatch[1] : '';
+  const innerBody  = bodyMatch  ? bodyMatch[1]  : ocHtml;
 
-    iframe.onload = async () => {
-      try {
-        const iDoc  = iframe.contentDocument || iframe.contentWindow.document;
-        const iWin  = iframe.contentWindow;
-        const iBody = iDoc.body;
+  // Cria container isolado no DOM principal — html2pdf captura normalmente
+  const container = document.createElement('div');
+  container.style.cssText = [
+    'position:fixed',
+    'top:-19999px',
+    'left:-19999px',
+    'width:794px',
+    'background:#fff',
+    'color:#111',
+    'font-family:Arial,sans-serif',
+    'z-index:-1'
+  ].join(';');
 
-        // Força fundo branco absoluto — elimina qualquer herança do tema escuro
-        iDoc.documentElement.style.cssText = 'background:#fff!important;color:#111!important';
-        iBody.style.cssText = 'background:#fff!important;color:#111!important;margin:0;padding:0';
+  // Injeta os estilos da OC em um <style> scoped + o conteúdo do body
+  container.innerHTML = `<style>${innerStyle}</style>${innerBody}`;
+  document.body.appendChild(container);
 
-        // Aguarda imagens carregarem (logo do hospital)
-        const imgs = Array.from(iDoc.querySelectorAll('img'));
-        if (imgs.length) {
-          await Promise.race([
-            Promise.all(imgs.map(img => new Promise(r => {
-              if (img.complete) { r(); return; }
-              img.onload = img.onerror = r;
-            }))),
-            new Promise(r => setTimeout(r, 2000)) // timeout
-          ]);
-        }
-        // Pausa extra de renderização
-        await new Promise(r => setTimeout(r, 400));
+  // Aguarda imagens carregarem (logo do hospital)
+  const imgs = Array.from(container.querySelectorAll('img'));
+  if (imgs.length) {
+    await Promise.race([
+      Promise.all(imgs.map(img => new Promise(r => {
+        if (img.complete && img.naturalWidth > 0) { r(); return; }
+        img.onload = img.onerror = r;
+      }))),
+      new Promise(r => setTimeout(r, 2500))
+    ]);
+  }
+  // Pausa extra para garantir renderização completa
+  await new Promise(r => setTimeout(r, 300));
 
-        const opt = {
-          margin:      [8, 8, 8, 8],
-          image:       { type: 'jpeg', quality: 0.97 },
-          html2canvas: {
-            scale:        2,
-            useCORS:      true,
-            logging:      false,
-            windowWidth:  794,
-            scrollY:      0,
-            backgroundColor: '#ffffff',
-            // onclone roda no contexto do html2canvas — garante branco mesmo após clone
-            onclone: (clonedDoc) => {
-              clonedDoc.documentElement.style.background = '#fff';
-              clonedDoc.body.style.background = '#fff';
-              clonedDoc.body.style.color = '#111';
-            }
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        // html2pdf precisa ser chamado no contexto da janela do iframe
-        // mas a biblioteca está na janela principal — passamos o elemento diretamente
-        const pdfBlob = await html2pdf()
-          .set(opt)
-          .from(iBody)
-          .outputPdf('blob');
-
-        document.body.removeChild(iframe);
-        resolve(pdfBlob);
-
-      } catch(err) {
-        try { document.body.removeChild(iframe); } catch(e) {}
-        reject(err);
+  const opt = {
+    margin:      [8, 8, 8, 8],
+    image:       { type: 'jpeg', quality: 0.97 },
+    html2canvas: {
+      scale:           2,
+      useCORS:         true,
+      logging:         false,
+      windowWidth:     794,
+      scrollY:         0,
+      backgroundColor: '#ffffff',
+      onclone: (clonedDoc) => {
+        clonedDoc.documentElement.style.cssText = 'background:#fff!important';
+        clonedDoc.body.style.cssText = 'background:#fff!important;color:#111!important;margin:0;padding:0';
       }
-    };
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
 
-    iframe.onerror = (err) => {
-      try { document.body.removeChild(iframe); } catch(e) {}
-      reject(err);
-    };
+  try {
+    const pdfBlob = await html2pdf()
+      .set(opt)
+      .from(container)
+      .outputPdf('blob');
 
-    // srcdoc garante contexto completamente isolado
-    iframe.srcdoc = ocHtml;
-    document.body.appendChild(iframe);
-  });
+    document.body.removeChild(container);
+    return pdfBlob;
+  } catch(err) {
+    try { document.body.removeChild(container); } catch(e) {}
+    throw err;
+  }
 }
 
 
@@ -5583,8 +5567,17 @@ window.downloadPDFOC = async function(ocId) {
   }
   if (!oc) { alert('OC não encontrada.'); return; }
 
-  const nomeForn    = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 30);
-  const nomeArquivo = `OC_${oc.numero}_${nomeForn.replace(/\s+/g,'_')}.pdf`;
+  const nomeForn = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, '').trim().substring(0, 40);
+  // Formata data da OC como DDMMAAAA (usa data atual como fallback)
+  let ddmmaaaa = '';
+  try {
+    const dataOC = oc.data ? new Date(oc.data + 'T12:00:00') : new Date();
+    const dd = String(dataOC.getDate()).padStart(2,'0');
+    const mm = String(dataOC.getMonth()+1).padStart(2,'0');
+    const aaaa = dataOC.getFullYear();
+    ddmmaaaa = `${dd}${mm}${aaaa}`;
+  } catch(e) { ddmmaaaa = new Date().toLocaleDateString('pt-BR').replace(/\//g,''); }
+  const nomeArquivo = `OC ${nomeForn} ${ddmmaaaa}.pdf`;
 
   if (window.toast) window.toast('⏳ Gerando PDF...', 'success');
   try {
@@ -5649,7 +5642,13 @@ window.enviarOCFornecedor = async function(ocId) {
   try {
     const pdfBlob = await _gerarPDFBlob(oc);
     const base64  = await _blobParaBase64(pdfBlob);
-    const nomePDF = `OC_${oc.numero}_${(oc.fornecedor||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}.pdf`;
+    const _nomeFornEmail = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, '').trim().substring(0, 40);
+    let _ddmmaaaaEmail = '';
+    try {
+      const _dOC = oc.data ? new Date(oc.data + 'T12:00:00') : new Date();
+      _ddmmaaaaEmail = String(_dOC.getDate()).padStart(2,'0') + String(_dOC.getMonth()+1).padStart(2,'0') + _dOC.getFullYear();
+    } catch(e) { _ddmmaaaaEmail = new Date().toLocaleDateString('pt-BR').replace(/\//g,''); }
+    const nomePDF = `OC ${_nomeFornEmail} ${_ddmmaaaaEmail}.pdf`;
 
     const gasPayload = {
       action:       'sendOCEmail',
