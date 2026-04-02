@@ -5521,52 +5521,53 @@ window.enviarOCFornecedor = function(ocId) {
     return;
   }
 
-  // Gera o HTML da OC para envio
-  const html = gerarHTMLOC(oc);
-
-  // Monta parâmetros para o EmailJS (template de OC)
+  // Monta lista de itens em texto
   const itensTexto = oc.itens.map((it, i) =>
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  const params = {
-    to_email: email,
-    to_name: oc.fornecedor,
-    oc_numero: oc.numero,
-    oc_data: formatarData(oc.data),
-    cond_pgto: oc.cond_pgto || 'A combinar',
+  // Envia via Google Apps Script — remetente comprashlr.ahvn@gmail.com
+  const gasPayload = {
+    action:       'sendOCEmail',
+    to_email:     email,
+    to_name:      oc.fornecedor,
+    oc_numero:    oc.numero,
+    oc_data:      formatarData(oc.data),
+    cond_pgto:    oc.cond_pgto || 'A combinar',
     prev_entrega: oc.prev_entrega ? formatarData(oc.prev_entrega) : 'A combinar',
-    itens_lista: itensTexto,
-    total_geral: fmtBRL(oc.total || 0),
-    obs: oc.obs || '',
-    from_name: window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
-    oc_html: html.substring(0, 8000) // limite do emailjs
+    itens_lista:  itensTexto,
+    total_geral:  fmtBRL(oc.total || 0),
+    obs:          oc.obs || '',
+    from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
+    forn_cnpj:    oc.forn_cnpj || ''
   };
 
-  // Tenta enviar via EmailJS se disponível
-  if (typeof emailjs !== 'undefined') {
-    showLoading('Enviando OC ao fornecedor...');
-    emailjs.send('service_kzwsra6', 'template_oc_envio', params)
-      .then(() => {
-        hideLoading();
-        // Marca OC como enviada
-        const ocSalva = window._ocList.find(x => x.id === oc.id);
-        if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
-        if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
-        fecharModalOC();
-        renderOCPage();
-        if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email}!`, 'success');
-      })
-      .catch(err => {
-        hideLoading();
-        console.error('EmailJS error:', err);
-        // Fallback: abre cliente de e-mail nativo
-        _enviarOCViaMailto(oc, email, itensTexto);
-      });
-  } else {
-    // Sem EmailJS — usa mailto como fallback
+  showLoading('Enviando OC ao fornecedor...');
+  fetch(GS_API, {
+    method: 'POST',
+    body: JSON.stringify(gasPayload)
+  })
+  .then(r => r.json())
+  .then(res => {
+    hideLoading();
+    if (res && res.success) {
+      const ocSalva = window._ocList.find(x => x.id === oc.id);
+      if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
+      if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+      fecharModalOC();
+      renderOCPage();
+      if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email}!`, 'success');
+    } else {
+      const motivo = (res && res.error) ? res.error : 'Erro desconhecido';
+      if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
+    }
+  })
+  .catch(err => {
+    hideLoading();
+    console.error('Erro GAS OC:', err);
+    // Fallback: abre cliente de e-mail nativo
     _enviarOCViaMailto(oc, email, itensTexto);
-  }
+  });
 };
 
 function _enviarOCViaMailto(oc, email, itensTexto) {
