@@ -3306,11 +3306,16 @@ const LOCAL_USERS = [
   {id:'local_user',name:'Usuário Padrão',email:'farmacia@ahvn.com',password:'farmacia123',role:'user',status:'approved',isCreator:'false'}
 ];
 
-async function getAllUsers() {
+async function getAllUsers(force=true) {
   try {
-    const remote = await gsGetAll('usuarios', false);
+    // force=true garante que sempre busca do servidor no login,
+    // evitando que o cache antigo bloqueie usuários recém-aprovados
+    const remote = await Promise.race([
+      gsGetAll('usuarios', force),
+      new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 7000))
+    ]);
     if(Array.isArray(remote) && remote.length > 0) return remote;
-  } catch(e) {}
+  } catch(e) { console.warn('getAllUsers fallback local:', e.message); }
   return LOCAL_USERS;
 }
 
@@ -3338,11 +3343,19 @@ async function doLogin() {
   errEl.style.display='none';
   if(!email||!pass){errEl.textContent='Preencha e-mail e senha.';errEl.style.display='block';return;}
   showLoading('Verificando credenciais...');
-  const users = await getAllUsers();
+  const users = await getAllUsers(true); // sempre busca fresco do servidor
   hideLoading();
-  const u=users.find(x=>x.email===email&&x.password===pass);
+
+  // Normaliza: remove espaços extras e compara sem distinção de maiúsculas no e-mail
+  const u = users.find(x =>
+    String(x.email  || '').trim().toLowerCase() === email.toLowerCase() &&
+    String(x.password || '').trim() === pass.trim()
+  );
   if(!u){errEl.textContent='E-mail ou senha incorretos.';errEl.style.display='block';return;}
-  if(u.status!=='approved'){errEl.textContent='Acesso pendente de aprovação.';errEl.style.display='block';return;}
+
+  // Normaliza status — Google Sheets pode retornar com espaço ou capitalizado
+  const status = String(u.status || '').trim().toLowerCase();
+  if(status !== 'approved'){errEl.textContent='Acesso pendente de aprovação. Contate o administrador.';errEl.style.display='block';return;}
   currentUser=u;
   if(remember) localStorage.setItem('fgUser',JSON.stringify({id:u.id,email:u.email,pass:u.password}));
   showApp();
@@ -3352,10 +3365,18 @@ async function checkRemembered() {
   try {
     const saved=JSON.parse(localStorage.getItem('fgUser'));
     if(saved) {
-      const users = await getAllUsers();
-      // Match by id OR by email+pass (for local users)
-      const u=users.find(x=>x.id===saved.id || (saved.email && x.email===saved.email && x.password===saved.pass));
-      if(u&&u.status==='approved'){currentUser=u;showApp();return true;}
+      // Força busca fresca para validar status atual (admin pode ter revogado)
+      const users = await getAllUsers(true);
+      const u = users.find(x =>
+        x.id === saved.id ||
+        (saved.email && String(x.email||'').trim().toLowerCase() === String(saved.email||'').trim().toLowerCase()
+                     && String(x.password||'').trim() === String(saved.pass||'').trim())
+      );
+      // Normaliza status igual ao doLogin
+      const status = String(u?.status || '').trim().toLowerCase();
+      if(u && status === 'approved'){currentUser=u;showApp();return true;}
+      // Se encontrou o usuário mas está pendente/revogado, limpa o lembrete
+      if(u && status !== 'approved') localStorage.removeItem('fgUser');
     }
   } catch(e){}
   return false;
@@ -4007,9 +4028,35 @@ async function renderUsuarios() {
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum usuário.</td></tr>';
 }
 
-async function aprovarUsuario(id){showLoading('Aprovando...');await gsUpdate('usuarios',id,{status:'approved'});gsCache['usuarios']=null;hideLoading();toast('✅ Usuário aprovado!');renderUsuarios();}
-async function revogarUsuario(id){showLoading('Revogando...');await gsUpdate('usuarios',id,{status:'pending'});gsCache['usuarios']=null;hideLoading();toast('Acesso revogado.');renderUsuarios();}
-async function excluirUsuario(id){if(!confirm('Excluir usuário?'))return;showLoading('Excluindo...');await gsDelete('usuarios',id);gsCache['usuarios']=null;hideLoading();toast('Usuário excluído.');renderUsuarios();}
+async function aprovarUsuario(id){
+  showLoading('Aprovando...');
+  const res = await gsUpdate('usuarios', id, {status:'approved'});
+  gsCache['usuarios'] = null; // força recarregamento no próximo login
+  hideLoading();
+  if(res && res.status === 'updated'){
+    toast('✅ Usuário aprovado! Ele já pode fazer login.', 'success');
+  } else {
+    toast('⚠️ Aprovação enviada, mas verifique a planilha.', 'warning');
+  }
+  renderUsuarios();
+}
+async function revogarUsuario(id){
+  showLoading('Revogando...');
+  await gsUpdate('usuarios', id, {status:'pending'});
+  gsCache['usuarios'] = null;
+  hideLoading();
+  toast('🔒 Acesso revogado.', 'warning');
+  renderUsuarios();
+}
+async function excluirUsuario(id){
+  if(!confirm('Excluir usuário?')) return;
+  showLoading('Excluindo...');
+  await gsDelete('usuarios', id);
+  gsCache['usuarios'] = null;
+  hideLoading();
+  toast('🗑 Usuário excluído.', 'success');
+  renderUsuarios();
+}
 
 // ── EMAIL (Não Conformidade) ──────────────────────────────────────────────────
 function compressConfFiles(files){
@@ -4160,8 +4207,7 @@ async function _enviarEmailDivergenciaFornecedor(nf, parts){
     observacao:      document.getElementById('receb-obs-geral')?.value || '',
     usuarioNome:     currentUser?.name || 'Sistema',
     remetente:       'comprashlr.ahvn@gmail.com',
-    fotos:           fotosBase64,
-    readReceipt:     true  // solicita confirmação de leitura ao fornecedor
+    fotos:           fotosBase64
   };
 
   try {
@@ -5475,52 +5521,52 @@ window.enviarOCFornecedor = function(ocId) {
     return;
   }
 
-  // Monta lista de itens em texto para o corpo do e-mail
+  // Gera o HTML da OC para envio
+  const html = gerarHTMLOC(oc);
+
+  // Monta parâmetros para o EmailJS (template de OC)
   const itensTexto = oc.itens.map((it, i) =>
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  // Envia via Google Apps Script (GAS) — remetente comprashlr.ahvn@gmail.com
-  const gasPayload = {
-    action:       'sendOCEmail',
-    to_email:     email,
-    to_name:      oc.fornecedor,
-    oc_numero:    oc.numero,
-    oc_data:      formatarData(oc.data),
-    cond_pgto:    oc.cond_pgto || 'A combinar',
+  const params = {
+    to_email: email,
+    to_name: oc.fornecedor,
+    oc_numero: oc.numero,
+    oc_data: formatarData(oc.data),
+    cond_pgto: oc.cond_pgto || 'A combinar',
     prev_entrega: oc.prev_entrega ? formatarData(oc.prev_entrega) : 'A combinar',
-    itens_lista:  itensTexto,
-    total_geral:  fmtBRL(oc.total || 0),
-    obs:          oc.obs || '',
-    from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
-    forn_cnpj:    oc.forn_cnpj || ''
+    itens_lista: itensTexto,
+    total_geral: fmtBRL(oc.total || 0),
+    obs: oc.obs || '',
+    from_name: window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
+    oc_html: html.substring(0, 8000) // limite do emailjs
   };
 
-  showLoading('Enviando OC ao fornecedor...');
-  fetch(GS_API, {
-    method: 'POST',
-    body: JSON.stringify(gasPayload)
-  })
-  .then(r => r.json())
-  .then(res => {
-    hideLoading();
-    if (res.success) {
-      const ocSalva = window._ocList.find(x => x.id === oc.id);
-      if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
-      if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
-      fecharModalOC();
-      renderOCPage();
-      if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email}! Você receberá confirmação de leitura.`, 'success');
-    } else {
-      alert('Erro ao enviar e-mail da OC: ' + (res.error || 'Erro desconhecido'));
-    }
-  })
-  .catch(err => {
-    hideLoading();
-    console.error('Erro GAS OC:', err);
-    // Fallback: abre cliente de e-mail nativo
+  // Tenta enviar via EmailJS se disponível
+  if (typeof emailjs !== 'undefined') {
+    showLoading('Enviando OC ao fornecedor...');
+    emailjs.send('service_kzwsra6', 'template_oc_envio', params)
+      .then(() => {
+        hideLoading();
+        // Marca OC como enviada
+        const ocSalva = window._ocList.find(x => x.id === oc.id);
+        if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
+        if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+        fecharModalOC();
+        renderOCPage();
+        if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email}!`, 'success');
+      })
+      .catch(err => {
+        hideLoading();
+        console.error('EmailJS error:', err);
+        // Fallback: abre cliente de e-mail nativo
+        _enviarOCViaMailto(oc, email, itensTexto);
+      });
+  } else {
+    // Sem EmailJS — usa mailto como fallback
     _enviarOCViaMailto(oc, email, itensTexto);
-  });
+  }
 };
 
 function _enviarOCViaMailto(oc, email, itensTexto) {
