@@ -6,6 +6,7 @@
 <title>Vila Nova — Gestão de Estoque Farmacêutico</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 :root {
   --bg:#0d1f17;--surface:#122b1f;--surface2:#183826;--surface3:#1e4530;
@@ -5521,52 +5522,91 @@ window.enviarOCFornecedor = function(ocId) {
     return;
   }
 
-  // Monta lista de itens em texto
+  // Monta lista de itens em texto (mantida para fallback mailto)
   const itensTexto = oc.itens.map((it, i) =>
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  // Envia via Google Apps Script — remetente comprashlr.ahvn@gmail.com
-  const gasPayload = {
-    action:       'sendOCEmail',
-    to_email:     email,
-    to_name:      oc.fornecedor,
-    oc_numero:    oc.numero,
-    oc_data:      formatarData(oc.data),
-    cond_pgto:    oc.cond_pgto || 'A combinar',
-    prev_entrega: oc.prev_entrega ? formatarData(oc.prev_entrega) : 'A combinar',
-    itens_lista:  itensTexto,
-    total_geral:  fmtBRL(oc.total || 0),
-    obs:          oc.obs || '',
-    from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
-    forn_cnpj:    oc.forn_cnpj || ''
+  // Gera o HTML da OC para converter em PDF
+  const ocHtml = gerarHTMLOC(oc);
+
+  // Converte o HTML em PDF (blob) usando html2pdf.js e extrai base64 para enviar ao GAS
+  showLoading('Gerando PDF da OC...');
+
+  // Cria elemento temporário fora da tela para renderizar o HTML da OC
+  const tempDiv = document.createElement('div');
+  tempDiv.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;background:#fff';
+  tempDiv.innerHTML = ocHtml;
+  document.body.appendChild(tempDiv);
+
+  const opt = {
+    margin:      [10, 10, 10, 10],
+    filename:    `OC_${oc.numero}_${(oc.fornecedor||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}.pdf`,
+    image:       { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  showLoading('Enviando OC ao fornecedor...');
-  fetch(GS_API, {
-    method: 'POST',
-    body: JSON.stringify(gasPayload)
-  })
-  .then(r => r.json())
-  .then(res => {
+  html2pdf().set(opt).from(tempDiv).outputPdf('blob').then(async (pdfBlob) => {
+    document.body.removeChild(tempDiv);
+
+    // Converte blob para base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result.split(',')[1]); // remove prefixo data:...;base64,
+      reader.onerror = reject;
+      reader.readAsDataURL(pdfBlob);
+    });
+
+    // Monta payload com PDF em base64 para o GAS anexar ao e-mail
+    const gasPayload = {
+      action:       'sendOCEmail',
+      to_email:     email,
+      to_name:      oc.fornecedor,
+      oc_numero:    oc.numero,
+      oc_data:      formatarData(oc.data),
+      cond_pgto:    oc.cond_pgto || 'A combinar',
+      prev_entrega: oc.prev_entrega ? formatarData(oc.prev_entrega) : 'A combinar',
+      itens_lista:  itensTexto,
+      total_geral:  fmtBRL(oc.total || 0),
+      obs:          oc.obs || '',
+      from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
+      forn_cnpj:    oc.forn_cnpj || '',
+      pdf_base64:   base64,
+      pdf_nome:     opt.filename
+    };
+
+    showLoading('Enviando OC ao fornecedor...');
+    fetch(GS_API, {
+      method: 'POST',
+      body: JSON.stringify(gasPayload)
+    })
+    .then(r => r.json())
+    .then(res => {
+      hideLoading();
+      if (res && res.success) {
+        const ocSalva = window._ocList.find(x => x.id === oc.id);
+        if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
+        if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+        fecharModalOC();
+        renderOCPage();
+        if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email} com PDF anexado!`, 'success');
+      } else {
+        const motivo = (res && res.error) ? res.error : 'Erro desconhecido';
+        if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
+      }
+    })
+    .catch(err => {
+      hideLoading();
+      console.error('Erro GAS OC:', err);
+      _enviarOCViaMailto(oc, email, itensTexto);
+    });
+
+  }).catch(err => {
+    document.body.removeChild(tempDiv);
     hideLoading();
-    if (res && res.success) {
-      const ocSalva = window._ocList.find(x => x.id === oc.id);
-      if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
-      if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
-      fecharModalOC();
-      renderOCPage();
-      if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email}!`, 'success');
-    } else {
-      const motivo = (res && res.error) ? res.error : 'Erro desconhecido';
-      if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
-    }
-  })
-  .catch(err => {
-    hideLoading();
-    console.error('Erro GAS OC:', err);
-    // Fallback: abre cliente de e-mail nativo
-    _enviarOCViaMailto(oc, email, itensTexto);
+    console.error('Erro ao gerar PDF:', err);
+    if (window.toast) window.toast('⚠️ Erro ao gerar PDF. Tente baixar o PDF manualmente.', 'error');
   });
 };
 
