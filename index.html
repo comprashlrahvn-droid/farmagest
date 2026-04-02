@@ -5270,6 +5270,119 @@ function salvarOC(oc) {
 // 7. GERAÇÃO DE PDF DA OC
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Converte um blob em string base64 (sem prefixo data:...).
+ */
+async function _blobParaBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Gera o PDF da OC como Blob usando html2pdf.
+ *
+ * Estratégia de isolamento do CSS:
+ * - Cria um <iframe> com srcdoc (contexto totalmente separado do DOM principal)
+ * - O HTML da OC já tem seu próprio <style> com background:#fff e cores pretas
+ * - Força background branco no html/body do iframe via JavaScript antes de capturar
+ * - Usa allowtransparency=false e sandbox mínimo para evitar herança de estilos
+ */
+async function _gerarPDFBlob(oc) {
+  const ocHtml = gerarHTMLOC(oc);
+
+  return new Promise((resolve, reject) => {
+    // Cria iframe isolado com srcdoc — sem acesso ao CSS da página pai
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts');
+    iframe.style.cssText = [
+      'position:fixed',
+      'top:-19999px',
+      'left:-19999px',
+      'width:794px',      // A4 a 96dpi ≈ 794px
+      'height:1123px',    // A4 a 96dpi ≈ 1123px
+      'border:none',
+      'opacity:0',
+      'pointer-events:none'
+    ].join(';');
+
+    iframe.onload = async () => {
+      try {
+        const iDoc  = iframe.contentDocument || iframe.contentWindow.document;
+        const iWin  = iframe.contentWindow;
+        const iBody = iDoc.body;
+
+        // Força fundo branco absoluto — elimina qualquer herança do tema escuro
+        iDoc.documentElement.style.cssText = 'background:#fff!important;color:#111!important';
+        iBody.style.cssText = 'background:#fff!important;color:#111!important;margin:0;padding:0';
+
+        // Aguarda imagens carregarem (logo do hospital)
+        const imgs = Array.from(iDoc.querySelectorAll('img'));
+        if (imgs.length) {
+          await Promise.race([
+            Promise.all(imgs.map(img => new Promise(r => {
+              if (img.complete) { r(); return; }
+              img.onload = img.onerror = r;
+            }))),
+            new Promise(r => setTimeout(r, 2000)) // timeout
+          ]);
+        }
+        // Pausa extra de renderização
+        await new Promise(r => setTimeout(r, 400));
+
+        const opt = {
+          margin:      [8, 8, 8, 8],
+          image:       { type: 'jpeg', quality: 0.97 },
+          html2canvas: {
+            scale:        2,
+            useCORS:      true,
+            logging:      false,
+            windowWidth:  794,
+            scrollY:      0,
+            backgroundColor: '#ffffff',
+            // onclone roda no contexto do html2canvas — garante branco mesmo após clone
+            onclone: (clonedDoc) => {
+              clonedDoc.documentElement.style.background = '#fff';
+              clonedDoc.body.style.background = '#fff';
+              clonedDoc.body.style.color = '#111';
+            }
+          },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        // html2pdf precisa ser chamado no contexto da janela do iframe
+        // mas a biblioteca está na janela principal — passamos o elemento diretamente
+        const pdfBlob = await html2pdf()
+          .set(opt)
+          .from(iBody)
+          .outputPdf('blob');
+
+        document.body.removeChild(iframe);
+        resolve(pdfBlob);
+
+      } catch(err) {
+        try { document.body.removeChild(iframe); } catch(e) {}
+        reject(err);
+      }
+    };
+
+    iframe.onerror = (err) => {
+      try { document.body.removeChild(iframe); } catch(e) {}
+      reject(err);
+    };
+
+    // srcdoc garante contexto completamente isolado
+    iframe.srcdoc = ocHtml;
+    document.body.appendChild(iframe);
+  });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function gerarHTMLOC(oc) {
   // Busca dados atualizados do fornecedor no cadastro
   const supCad = (window._fornecedores || []).find(f => f.id === oc.forn_id || f.name === oc.fornecedor);
@@ -5470,46 +5583,28 @@ window.downloadPDFOC = async function(ocId) {
   }
   if (!oc) { alert('OC não encontrada.'); return; }
 
-  const ocHtmlDl = gerarHTMLOC(oc);
-  const nomeForn = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 30);
-  const nomeArquivo = `OC_${oc.numero}_${nomeForn.replace(/\s+/g,'_')}`;
+  const nomeForn    = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 30);
+  const nomeArquivo = `OC_${oc.numero}_${nomeForn.replace(/\s+/g,'_')}.pdf`;
 
   if (window.toast) window.toast('⏳ Gerando PDF...', 'success');
-
-  // Usa iframe para renderizar o documento HTML com todos os estilos antes de capturar
-  const dlIframe = document.createElement('iframe');
-  dlIframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:900px;height:1200px;border:none;visibility:hidden';
-  document.body.appendChild(dlIframe);
-  dlIframe.contentDocument.open();
-  dlIframe.contentDocument.write(ocHtmlDl);
-  dlIframe.contentDocument.close();
-
-  await new Promise(resolve => {
-    if (dlIframe.contentDocument.readyState === 'complete') { resolve(); return; }
-    dlIframe.onload = resolve;
-    setTimeout(resolve, 1500);
-  });
-  await new Promise(resolve => setTimeout(resolve, 600));
-
-  const dlOpt = {
-    margin:      [8, 8, 8, 8],
-    filename:    nomeArquivo + '.pdf',
-    image:       { type: 'jpeg', quality: 0.97 },
-    html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 900, scrollY: 0 },
-    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  html2pdf().set(dlOpt).from(dlIframe.contentDocument.body).save().then(() => {
-    document.body.removeChild(dlIframe);
-    if (window.toast) window.toast(`⬇️ PDF baixado: ${nomeArquivo}.pdf`, 'success');
-  }).catch(err => {
-    try { document.body.removeChild(dlIframe); } catch(e) {}
+  try {
+    const pdfBlob = await _gerarPDFBlob(oc);
+    const url     = URL.createObjectURL(pdfBlob);
+    const a       = document.createElement('a');
+    a.href     = url;
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+    if (window.toast) window.toast(`⬇️ PDF baixado: ${nomeArquivo}`, 'success');
+  } catch(err) {
     console.error('Erro PDF download:', err);
     // Fallback: abre janela de impressão
+    const ocHtmlFb = gerarHTMLOC(oc);
     const win = window.open('', '_blank');
-    if (win) { win.document.write(ocHtmlDl); win.document.close(); win.print(); }
+    if (win) { win.document.write(ocHtmlFb); win.document.close(); win.print(); }
     if (window.toast) window.toast('⬇️ Use a janela de impressão para salvar como PDF.', 'success');
-  });
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5549,55 +5644,13 @@ window.enviarOCFornecedor = async function(ocId) {
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  // Gera o HTML completo da OC (documento inteiro com <head> e <style>)
-  const ocHtml = gerarHTMLOC(oc);
-
+  // Gera o PDF real da OC e envia como anexo via GAS
   showLoading('Gerando PDF da OC...');
+  try {
+    const pdfBlob = await _gerarPDFBlob(oc);
+    const base64  = await _blobParaBase64(pdfBlob);
+    const nomePDF = `OC_${oc.numero}_${(oc.fornecedor||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}.pdf`;
 
-  // Usa iframe oculto para renderizar o documento HTML completo com todos os estilos.
-  // Isso garante que o html2canvas capture o layout correto (com logo, tabelas, totais).
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:900px;height:1200px;border:none;visibility:hidden';
-  document.body.appendChild(iframe);
-
-  // Escreve o documento HTML completo dentro do iframe
-  iframe.contentDocument.open();
-  iframe.contentDocument.write(ocHtml);
-  iframe.contentDocument.close();
-
-  // Aguarda o iframe carregar completamente (imagens, estilos)
-  await new Promise(resolve => {
-    if (iframe.contentDocument.readyState === 'complete') { resolve(); return; }
-    iframe.onload = resolve;
-    setTimeout(resolve, 1500); // timeout de segurança
-  });
-  // Pausa extra para renderização de imagens (logo)
-  await new Promise(resolve => setTimeout(resolve, 600));
-
-  const iframeBody = iframe.contentDocument.body;
-
-  const opt = {
-    margin:      [8, 8, 8, 8],
-    filename:    `OC_${oc.numero}_${(oc.fornecedor||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}.pdf`,
-    image:       { type: 'jpeg', quality: 0.97 },
-    html2canvas: { scale: 2, useCORS: true, logging: false,
-                   windowWidth: 900, scrollY: 0,
-                   onclone: (doc) => { doc.body.style.background = '#fff'; } },
-    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  html2pdf().set(opt).from(iframeBody).outputPdf('blob').then(async (pdfBlob) => {
-    document.body.removeChild(iframe);
-
-    // Converte blob para base64
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result.split(',')[1]); // remove prefixo data:...;base64,
-      reader.onerror = reject;
-      reader.readAsDataURL(pdfBlob);
-    });
-
-    // Monta payload com PDF em base64 para o GAS anexar ao e-mail
     const gasPayload = {
       action:       'sendOCEmail',
       to_email:     email,
@@ -5612,41 +5665,31 @@ window.enviarOCFornecedor = async function(ocId) {
       from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
       forn_cnpj:    oc.forn_cnpj || '',
       pdf_base64:   base64,
-      pdf_nome:     opt.filename
+      pdf_nome:     nomePDF
     };
 
     showLoading('Enviando OC ao fornecedor...');
-    fetch(GS_API, {
-      method: 'POST',
-      body: JSON.stringify(gasPayload)
-    })
-    .then(r => r.json())
-    .then(res => {
-      hideLoading();
-      if (res && res.success) {
-        const ocSalva = window._ocList.find(x => x.id === oc.id);
-        if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
-        if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
-        fecharModalOC();
-        renderOCPage();
-        if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email} com PDF anexado!`, 'success');
-      } else {
-        const motivo = (res && res.error) ? res.error : 'Erro desconhecido';
-        if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
-      }
-    })
-    .catch(err => {
-      hideLoading();
-      console.error('Erro GAS OC:', err);
-      _enviarOCViaMailto(oc, email, itensTexto);
-    });
-
-  }).catch(err => {
-    try { document.body.removeChild(iframe); } catch(e) {}
+    const resp = await fetch(GS_API, { method: 'POST', body: JSON.stringify(gasPayload) });
+    const res  = await resp.json();
     hideLoading();
-    console.error('Erro ao gerar PDF:', err);
-    if (window.toast) window.toast('⚠️ Erro ao gerar PDF. Tente baixar o PDF manualmente.', 'error');
-  });
+
+    if (res && res.success) {
+      const ocSalva = window._ocList.find(x => x.id === oc.id);
+      if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
+      if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+      fecharModalOC();
+      renderOCPage();
+      if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email} com PDF anexado!`, 'success');
+    } else {
+      const motivo = (res && res.error) ? res.error : 'Erro desconhecido';
+      if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
+    }
+  } catch(err) {
+    hideLoading();
+    console.error('Erro ao gerar/enviar PDF:', err);
+    if (window.toast) window.toast('⚠️ Erro ao gerar PDF. Usando fallback de e-mail.', 'error');
+    _enviarOCViaMailto(oc, email, itensTexto);
+  }
 };
 
 function _enviarOCViaMailto(oc, email, itensTexto) {
