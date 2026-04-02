@@ -4716,10 +4716,20 @@ function adicionarPaginaOC() {
 
 window._ocList = window._ocList || [];
 
-// Gera número sequencial de OC
+// Gera número sequencial de OC — sempre incrementa o maior número já usado,
+// independente de exclusões ou ordem de carregamento.
 function gerarNumOC() {
-  const n = (window._ocList.length + 1).toString().padStart(4, '0');
-  return 'OC-' + n + '-' + new Date().getFullYear();
+  const ano = new Date().getFullYear();
+  let maxSeq = 0;
+  (window._ocList || []).forEach(function(oc) {
+    // Extrai sequência numérica de formatos como OC-0042-2026 ou OC-0042
+    const m = (oc.numero || '').match(/OC-?(\d+)/i);
+    if (m) {
+      const seq = parseInt(m[1], 10);
+      if (seq > maxSeq) maxSeq = seq;
+    }
+  });
+  return 'OC-' + String(maxSeq + 1).padStart(4, '0') + '-' + ano;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5445,7 +5455,7 @@ function gerarHTMLOC(oc) {
 </html>`;
 }
 
-window.downloadPDFOC = function(ocId) {
+window.downloadPDFOC = async function(ocId) {
   let oc;
   if (ocId) {
     oc = window._ocList.find(x => x.id === ocId);
@@ -5460,41 +5470,53 @@ window.downloadPDFOC = function(ocId) {
   }
   if (!oc) { alert('OC não encontrada.'); return; }
 
-  const html = gerarHTMLOC(oc);
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-
-  // Nome do arquivo: OC "fornecedor" DDMMAAAA.html (abre para impressão como PDF)
-  const data = (oc.data || new Date().toISOString().split('T')[0]).replace(/-/g, '');
-  const d = data.substring(6,8) + data.substring(4,6) + data.substring(0,4);
+  const ocHtmlDl = gerarHTMLOC(oc);
   const nomeForn = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 30);
-  const nomeArquivo = `OC ${nomeForn} ${d}`;
+  const nomeArquivo = `OC_${oc.numero}_${nomeForn.replace(/\s+/g,'_')}`;
 
-  // Abre em nova janela para impressão como PDF
-  const win = window.open(url, '_blank');
-  if (win) {
-    win.onload = () => {
-      win.document.title = nomeArquivo;
-      setTimeout(() => {
-        win.focus();
-        win.print();
-      }, 500);
-    };
-  }
+  if (window.toast) window.toast('⏳ Gerando PDF...', 'success');
 
-  // Também faz download do HTML com nome correto
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nomeArquivo + '.html';
-  // Não clica automaticamente — usuário usa a janela de impressão para salvar PDF
-  if (window.toast) window.toast(`⬇️ PDF preparado: ${nomeArquivo}`, 'success');
+  // Usa iframe para renderizar o documento HTML com todos os estilos antes de capturar
+  const dlIframe = document.createElement('iframe');
+  dlIframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:900px;height:1200px;border:none;visibility:hidden';
+  document.body.appendChild(dlIframe);
+  dlIframe.contentDocument.open();
+  dlIframe.contentDocument.write(ocHtmlDl);
+  dlIframe.contentDocument.close();
+
+  await new Promise(resolve => {
+    if (dlIframe.contentDocument.readyState === 'complete') { resolve(); return; }
+    dlIframe.onload = resolve;
+    setTimeout(resolve, 1500);
+  });
+  await new Promise(resolve => setTimeout(resolve, 600));
+
+  const dlOpt = {
+    margin:      [8, 8, 8, 8],
+    filename:    nomeArquivo + '.pdf',
+    image:       { type: 'jpeg', quality: 0.97 },
+    html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 900, scrollY: 0 },
+    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().set(dlOpt).from(dlIframe.contentDocument.body).save().then(() => {
+    document.body.removeChild(dlIframe);
+    if (window.toast) window.toast(`⬇️ PDF baixado: ${nomeArquivo}.pdf`, 'success');
+  }).catch(err => {
+    try { document.body.removeChild(dlIframe); } catch(e) {}
+    console.error('Erro PDF download:', err);
+    // Fallback: abre janela de impressão
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(ocHtmlDl); win.document.close(); win.print(); }
+    if (window.toast) window.toast('⬇️ Use a janela de impressão para salvar como PDF.', 'success');
+  });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. ENVIO AO FORNECEDOR
 // ─────────────────────────────────────────────────────────────────────────────
 
-window.enviarOCFornecedor = function(ocId) {
+window.enviarOCFornecedor = async function(ocId) {
   let oc;
   if (ocId) {
     oc = window._ocList.find(x => x.id === ocId);
@@ -5527,28 +5549,45 @@ window.enviarOCFornecedor = function(ocId) {
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  // Gera o HTML da OC para converter em PDF
+  // Gera o HTML completo da OC (documento inteiro com <head> e <style>)
   const ocHtml = gerarHTMLOC(oc);
 
-  // Converte o HTML em PDF (blob) usando html2pdf.js e extrai base64 para enviar ao GAS
   showLoading('Gerando PDF da OC...');
 
-  // Cria elemento temporário fora da tela para renderizar o HTML da OC
-  const tempDiv = document.createElement('div');
-  tempDiv.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;background:#fff';
-  tempDiv.innerHTML = ocHtml;
-  document.body.appendChild(tempDiv);
+  // Usa iframe oculto para renderizar o documento HTML completo com todos os estilos.
+  // Isso garante que o html2canvas capture o layout correto (com logo, tabelas, totais).
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:900px;height:1200px;border:none;visibility:hidden';
+  document.body.appendChild(iframe);
+
+  // Escreve o documento HTML completo dentro do iframe
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(ocHtml);
+  iframe.contentDocument.close();
+
+  // Aguarda o iframe carregar completamente (imagens, estilos)
+  await new Promise(resolve => {
+    if (iframe.contentDocument.readyState === 'complete') { resolve(); return; }
+    iframe.onload = resolve;
+    setTimeout(resolve, 1500); // timeout de segurança
+  });
+  // Pausa extra para renderização de imagens (logo)
+  await new Promise(resolve => setTimeout(resolve, 600));
+
+  const iframeBody = iframe.contentDocument.body;
 
   const opt = {
-    margin:      [10, 10, 10, 10],
+    margin:      [8, 8, 8, 8],
     filename:    `OC_${oc.numero}_${(oc.fornecedor||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}.pdf`,
-    image:       { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
+    image:       { type: 'jpeg', quality: 0.97 },
+    html2canvas: { scale: 2, useCORS: true, logging: false,
+                   windowWidth: 900, scrollY: 0,
+                   onclone: (doc) => { doc.body.style.background = '#fff'; } },
     jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  html2pdf().set(opt).from(tempDiv).outputPdf('blob').then(async (pdfBlob) => {
-    document.body.removeChild(tempDiv);
+  html2pdf().set(opt).from(iframeBody).outputPdf('blob').then(async (pdfBlob) => {
+    document.body.removeChild(iframe);
 
     // Converte blob para base64
     const base64 = await new Promise((resolve, reject) => {
@@ -5603,7 +5642,7 @@ window.enviarOCFornecedor = function(ocId) {
     });
 
   }).catch(err => {
-    document.body.removeChild(tempDiv);
+    try { document.body.removeChild(iframe); } catch(e) {}
     hideLoading();
     console.error('Erro ao gerar PDF:', err);
     if (window.toast) window.toast('⚠️ Erro ao gerar PDF. Tente baixar o PDF manualmente.', 'error');
