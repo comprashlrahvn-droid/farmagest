@@ -549,6 +549,15 @@ textarea.form-input{min-height:80px;resize:vertical;}
               <div class="form-group"><label class="form-label">Valor Total</label><input class="form-input" id="nf-valor" readonly style="opacity:0.7"></div>
             </div>
             <div class="form-group"><label class="form-label">Chave de Acesso</label><input class="form-input" id="nf-chave" readonly style="opacity:0.7;font-size:0.72rem"></div>
+            <div class="form-group" style="margin-top:10px;padding:12px;background:rgba(46,204,113,0.07);border:1px solid rgba(46,204,113,0.3);border-radius:8px">
+              <label class="form-label" style="color:var(--accent)">🗂️ Vincular ao Pedido de Compra (opcional)</label>
+              <div style="position:relative">
+                <input class="form-input" id="nf-oc-search" placeholder="Digite o número ou fornecedor da OC..." oninput="searchOCParaNF('nf')" autocomplete="off" style="border-color:rgba(46,204,113,0.5)">
+                <input type="hidden" id="nf-oc-id">
+                <div id="nf-oc-sug" style="position:absolute;top:100%;left:0;right:0;z-index:400;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;display:none;"></div>
+              </div>
+              <p style="font-size:0.72rem;color:var(--text3);margin-top:4px">ℹ️ Opcional — se vinculado, os itens da OC selecionada terão o status atualizado automaticamente.</p>
+            </div>
           </div>
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -585,6 +594,15 @@ textarea.form-input{min-height:80px;resize:vertical;}
               <div class="form-group"><label class="form-label">Valor Total</label><input class="form-input" id="mnf-valor" placeholder="Ex: R$ 1.500,00"></div>
               <div class="form-group"><label class="form-label">Chave de Acesso</label><input class="form-input" id="mnf-chave" placeholder="44 dígitos" maxlength="44" style="font-size:0.72rem"></div>
             </div>
+            <div class="form-group" style="margin-top:4px;padding:12px;background:rgba(46,204,113,0.07);border:1px solid rgba(46,204,113,0.3);border-radius:8px">
+              <label class="form-label" style="color:var(--accent)">🗂️ Vincular ao Pedido de Compra (opcional)</label>
+              <div style="position:relative">
+                <input class="form-input" id="mnf-oc-search" placeholder="Digite o número ou fornecedor da OC..." oninput="searchOCParaNF('mnf')" autocomplete="off" style="border-color:rgba(46,204,113,0.5)">
+                <input type="hidden" id="mnf-oc-id">
+                <div id="mnf-oc-sug" style="position:absolute;top:100%;left:0;right:0;z-index:400;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;display:none;"></div>
+              </div>
+              <p style="font-size:0.72rem;color:var(--text3);margin-top:4px">ℹ️ Opcional — se vinculado, os itens da OC selecionada terão o status atualizado automaticamente.</p>
+            </div>
           </div>
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -606,7 +624,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
         </div>
       </div>
       <div class="tab-panel" id="nf-tab-historico">
-        <div class="table-wrap"><table><thead><tr><th>NF</th><th>Fornecedor</th><th>Data</th><th>Itens</th><th>Status</th><th>Ações</th></tr></thead><tbody id="nf-hist-body"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>NF</th><th>Fornecedor</th><th>Data</th><th>Pedido de Compra</th><th>Itens</th><th>Status</th><th>Ações</th></tr></thead><tbody id="nf-hist-body"></tbody></table></div>
       </div>
       <div class="tab-panel" id="nf-tab-vincular">
         <div class="alert alert-info">🔗 Vincule itens da NF com produtos do estoque para consultas futuras.</div>
@@ -1054,6 +1072,7 @@ let tempPad=[],tempDesq=[];
 let vincularNFId=null,vincularItemDesc='';
 // Ordens de Compra individuais
 let purchaseOrders = [];
+window.purchaseOrders = purchaseOrders; // expõe globalmente para o módulo OC
 let orderPage=1;
 
 // NAV
@@ -1469,6 +1488,70 @@ function limparNFForm(){
   document.getElementById('nf-upload-zone').style.display='block';
   document.getElementById('nf-xml-file').value='';
   document.getElementById('nf-result-wrap').innerHTML='';
+  // Limpa vínculo OC
+  const ocSearch=document.getElementById('nf-oc-search');if(ocSearch)ocSearch.value='';
+  const ocId=document.getElementById('nf-oc-id');if(ocId)ocId.value='';
+  const ocSug=document.getElementById('nf-oc-sug');if(ocSug)ocSug.style.display='none';
+}
+
+// ── BUSCA DE OC PARA VÍNCULO NA NF ───────────────────────────────────────────
+function searchOCParaNF(prefix){
+  const q=(document.getElementById(prefix+'-oc-search')?.value||'').toLowerCase().trim();
+  const sugEl=document.getElementById(prefix+'-oc-sug');
+  if(!sugEl)return;
+  if(q.length<1){sugEl.style.display='none';return;}
+
+  // Unifica _ocList (módulo OC) + purchaseOrders (aba Pedidos), evitando duplicatas por id
+  const ocListItems = (window._ocList||[])
+    .filter(oc=>oc.status!=='cancelada')
+    .map(oc=>({
+      id: String(oc.id),
+      numero: oc.numero||'',
+      fornecedor: oc.fornecedor||'',
+      status: oc.status||'',
+      itensLen: oc.itens?.length||0,
+      origem: 'oclist'
+    }));
+
+  const poItems = (window.purchaseOrders||purchaseOrders||[])
+    .filter(o=>o.status!=='entregue')
+    .map(o=>({
+      id: String(o.id),
+      numero: o.numero||'',
+      fornecedor: o.fornecedor||o.itens?.[0]?.material||'',
+      status: o.status||'aberto',
+      itensLen: o.itens?.length||0,
+      origem: 'pedidos'
+    }));
+
+  // Mescla sem duplicatas (prioriza _ocList se mesmo id)
+  const seen = new Set(ocListItems.map(x=>x.id));
+  const merged = [...ocListItems, ...poItems.filter(x=>!seen.has(x.id))];
+
+  const ocs = merged.filter(oc=>
+    oc.numero.toLowerCase().includes(q)||
+    oc.fornecedor.toLowerCase().includes(q)
+  ).slice(0,10);
+
+  if(!ocs.length){sugEl.innerHTML='<div style="padding:8px 12px;font-size:0.8rem;color:var(--text3)">Nenhuma OC encontrada</div>';sugEl.style.display='block';return;}
+
+  const statusLabel={rascunho:'📝',enviada:'📤',parcial:'🔵',atendida:'✅',cancelada:'🚫',aberto:'🔵',faturado:'🟡',entregue:'🟢'};
+  sugEl.innerHTML=ocs.map(oc=>`
+    <div class="sug-item" onclick="selecionarOCParaNF('${prefix}','${oc.id}','${oc.numero.replace(/'/g,"\\'")}','${oc.fornecedor.replace(/'/g,"\\'")}')">
+      <b>${oc.numero}</b> ${statusLabel[oc.status]||''} — <span style="color:var(--text2)">${oc.fornecedor||'—'}</span>
+      <span class="dim" style="font-size:0.7rem;margin-left:6px">${oc.itensLen} itens</span>
+      ${oc.origem==='pedidos'?'<span class="badge badge-gray" style="font-size:0.62rem;margin-left:4px">📑 Pedido</span>':''}
+    </div>`).join('');
+  sugEl.style.display='block';
+}
+
+function selecionarOCParaNF(prefix, ocId, ocNum, ocForn){
+  const searchEl=document.getElementById(prefix+'-oc-search');
+  const hiddenEl=document.getElementById(prefix+'-oc-id');
+  const sugEl=document.getElementById(prefix+'-oc-sug');
+  if(searchEl) searchEl.value=ocNum+' — '+ocForn;
+  if(hiddenEl) hiddenEl.value=ocId;
+  if(sugEl) sugEl.style.display='none';
 }
 
 // ── DETECÇÃO DE NF DUPLICADA ─────────────────────────────────────────────────
@@ -1535,16 +1618,19 @@ function registrarNF(){
   if(!nfXMLData){alert('Nenhum XML carregado!');return;}
   const {numero,fornecedor,data,chave}=nfXMLData;
 
+  // Vínculo com OC é opcional
+  const ocId=document.getElementById('nf-oc-id')?.value?.trim()||'';
+
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
   if(duplicatas.length){
-    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNF(numero,fornecedor,data,chave));
+    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNF(numero,fornecedor,data,chave,ocId));
     return;
   }
-  _executarRegistroNF(numero,fornecedor,data,chave);
+  _executarRegistroNF(numero,fornecedor,data,chave,ocId);
 }
 
-function _executarRegistroNF(numero,fornecedor,data,chave){
+function _executarRegistroNF(numero,fornecedor,data,chave,ocId){
   // save vinculos + mark status
   nfItens.forEach(it=>{
     if(it.matched?.length>0){
@@ -1563,12 +1649,17 @@ function _executarRegistroNF(numero,fornecedor,data,chave){
       it.matched=[{...real}];
     }
   });
-  const nfEntry={id:Date.now(),numero,fornecedor,data,itens:JSON.parse(JSON.stringify(nfItens)),chave,status:'faturado'};
+  const nfEntry={id:Date.now(),numero,fornecedor,data,itens:JSON.parse(JSON.stringify(nfItens)),chave,status:'faturado',oc_id:ocId||null};
   nfHistory.push(nfEntry);
   const marcados=nfItens.filter(i=>i.matched?.length>0).length;
+
+  // Busca número da OC para exibição
+  const ocVinculada = (window._ocList||[]).find(o=>o.id===ocId);
+  const ocNumLabel = ocVinculada ? ` | OC: <b>${ocVinculada.numero}</b>` : '';
+
   document.getElementById('nf-result-wrap').innerHTML=`<div class="nf-result">
     <h4>✅ NF ${numero} registrada — ${fornecedor}</h4>
-    <p style="font-size:0.78rem;color:var(--text3);margin-bottom:10px">Data: ${data} | ${nfItens.length} item(s) lidos | ${marcados} vinculado(s) ao estoque</p>
+    <p style="font-size:0.78rem;color:var(--text3);margin-bottom:10px">Data: ${data} | ${nfItens.length} item(s) lidos | ${marcados} vinculado(s) ao estoque${ocNumLabel}</p>
     <div class="nf-item-list">${nfItens.map(it=>{
       const p=it.matched?.[0];
       const diff=p?(p.pedido||0)-(it.qty_unidades_final||calcQtdUn(it)):null;
@@ -1582,8 +1673,8 @@ function _executarRegistroNF(numero,fornecedor,data,chave){
     }).join('')}</div>
     ${marcados>0?`<div style="margin-top:10px;font-size:0.78rem;color:var(--yellow)">🟡 ${marcados} item(s) marcados como FATURADOS. Vínculos salvos para próximas importações.</div>`:''}
   </div>`;
-  // Vincular NF às ordens de compra abertas (marcar como faturado)
-  linkNFToOrders(nfItens);
+  // Vincula NF apenas à OC selecionada (atualiza status só nessa OC)
+  linkNFToSpecificOC(nfItens, ocId);
   limparNFForm();
   renderDashboard();renderNFHistorico();renderOrders();renderRecebimento();renderEntregas();
   saveMainState();
@@ -2539,6 +2630,7 @@ function gerarPedido(){
     status:'aberto' // aberto | parcial | faturado | entregue
   };
   purchaseOrders.push(ordem);
+  window.purchaseOrders = purchaseOrders; // mantém referência global sincronizada
   // Clear pedido quantities
   itens.forEach(p=>{p.pedido=null;p.status='normal';});
   updateBadges();updateOrdersBadge();
@@ -2566,6 +2658,7 @@ function calcOrderStatus(o){
 
 function renderOrders(){
   updateOrdersBadge();
+  if(typeof window.renderOCPage==='function')window.renderOCPage();
   const q=(document.getElementById('search-orders')||{}).value?.toLowerCase()||'';
   const fs=(document.getElementById('filter-orders-status')||{}).value||'';
   const data=purchaseOrders.filter(o=>{
@@ -2656,6 +2749,63 @@ function linkNFToOrders(nfItens){
     });
     o.status=calcOrderStatus(o);
   });
+  updateOrdersBadge();
+}
+
+// Vincula NF somente à OC especificada pelo ID (nova lógica de vínculo explícito)
+function linkNFToSpecificOC(nfItensArr, ocId){
+  // 1. Atualiza purchaseOrders (lista antiga) — apenas o order que tenha oc_ref igual ao ocId
+  purchaseOrders.forEach(o=>{
+    if(o.status==='entregue')return;
+    // Verifica se este order está vinculado à OC selecionada
+    const ocRef = o.oc_ref || o.id;
+    if(ocRef && String(ocRef) !== String(ocId)) return;
+    o.itens.forEach(oi=>{
+      if(oi.status!=='pendente')return;
+      const matched=nfItensArr.find(ni=>ni.matched?.some(m=>m.id===oi.prod_id));
+      if(matched){
+        const qtdUn=calcQtdUn(matched);
+        oi.qty_faturada=(oi.qty_faturada||0)+qtdUn;
+        oi.status='faturado';
+      }
+    });
+    o.status=calcOrderStatus(o);
+  });
+
+  // 2. Atualiza a OC no _ocList pelo ID
+  if(ocId && window._ocList){
+    const oc = window._ocList.find(o=>o.id===ocId);
+    if(oc && oc.status!=='cancelada' && oc.status!=='atendida'){
+      oc.itens.forEach(ocItem=>{
+        // Tenta casar item da OC com item da NF pelo prod_id vinculado
+        const nfMatch = nfItensArr.find(ni=>{
+          if(!ni.matched?.length) return false;
+          const prodId = ni.matched[0].id;
+          return String(ocItem.prod_id) === String(prodId);
+        });
+        // Também tenta casar por descrição/código como fallback
+        const nfMatchFallback = !nfMatch ? nfItensArr.find(ni=>{
+          const desc = (ni.descricao||'').toLowerCase();
+          const ocDesc = (ocItem.descricao||'').toLowerCase();
+          return desc && ocDesc && (desc.includes(ocDesc.slice(0,12)) || ocDesc.includes(desc.slice(0,12)));
+        }) : null;
+        const hit = nfMatch || nfMatchFallback;
+        if(hit){
+          const qtdUn = calcQtdUn(hit);
+          ocItem.qty_faturada = (ocItem.qty_faturada||0) + qtdUn;
+          if(ocItem.status !== 'entregue') ocItem.status = 'faturado';
+        }
+      });
+      // Recalcula status da OC
+      const total = oc.itens.length;
+      const fat = oc.itens.filter(i=>i.status==='faturado'||i.status==='entregue').length;
+      const ent = oc.itens.filter(i=>i.status==='entregue').length;
+      if(ent === total) oc.status = 'atendida';
+      else if(fat > 0) oc.status = fat === total ? 'enviada' : 'parcial';
+      // Salva
+      if(window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+    }
+  }
   updateOrdersBadge();
 }
 
@@ -2836,6 +2986,10 @@ function limparNFManual(){
   document.getElementById('mnf-chave').value='';
   const mfSug=document.getElementById('mnf-forn-sug');if(mfSug)mfSug.style.display='none';
   document.getElementById('mnf-result-wrap').innerHTML='';
+  // Limpa vínculo OC
+  const mnfOcSearch=document.getElementById('mnf-oc-search');if(mnfOcSearch)mnfOcSearch.value='';
+  const mnfOcId=document.getElementById('mnf-oc-id');if(mnfOcId)mnfOcId.value='';
+  const mnfOcSug=document.getElementById('mnf-oc-sug');if(mnfOcSug)mnfOcSug.style.display='none';
   renderManualItens();
 }
 
@@ -3002,18 +3156,20 @@ function registrarNFManual(){
   if(!numero){ alert('Informe o número da NF.'); return; }
   if(!fornecedor){ alert('Informe o fornecedor.'); return; }
   if(!data){ alert('Informe a data de emissão.'); return; }
-  // Itens opcionais — NF pode ser registrada só para acompanhamento
+
+  // Vínculo com OC é opcional
+  const ocId=document.getElementById('mnf-oc-id')?.value?.trim()||'';
 
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
   if(duplicatas.length){
-    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNFManual(numero, fornecedor, data));
+    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNFManual(numero, fornecedor, data, ocId));
     return;
   }
-  _executarRegistroNFManual(numero, fornecedor, data);
+  _executarRegistroNFManual(numero, fornecedor, data, ocId);
 }
 
-function _executarRegistroNFManual(numero, fornecedor, data){
+function _executarRegistroNFManual(numero, fornecedor, data, ocId){
   const valor = document.getElementById('mnf-valor').value.trim();
   const chave = document.getElementById('mnf-chave').value.trim();
   nfManualItens.forEach(it=>{
@@ -3037,14 +3193,18 @@ function _executarRegistroNFManual(numero, fornecedor, data){
     numero, fornecedor, cnpj, data, valor, chave,
     itens: JSON.parse(JSON.stringify(nfManualItens)),
     status: 'faturado',
-    origem: 'manual'
+    origem: 'manual',
+    oc_id: ocId||null
   };
   nfHistory.push(nfEntry);
 
   const marcados = nfManualItens.filter(i=>i.matched?.length>0).length;
+  const ocVinculada = (window._ocList||[]).find(o=>o.id===ocId);
+  const ocNumLabel = ocVinculada ? ` | OC: <b>${ocVinculada.numero}</b>` : '';
+
   document.getElementById('mnf-result-wrap').innerHTML=`<div class="nf-result">
     <h4>✅ NF ${numero} registrada manualmente — ${fornecedor}</h4>
-    <p style="font-size:0.78rem;color:var(--text3);margin-bottom:10px">Data: ${data} | ${nfManualItens.length} item(s) | ${marcados} vinculado(s) ao estoque</p>
+    <p style="font-size:0.78rem;color:var(--text3);margin-bottom:10px">Data: ${data} | ${nfManualItens.length} item(s) | ${marcados} vinculado(s) ao estoque${ocNumLabel}</p>
     <div class="nf-item-list">${nfManualItens.map(it=>{
       const p=it.matched?.[0];
       const qtdUn=it.qty_unidades_final||(it.qty_unidades!=null?it.qty_unidades:it.quantidade*(it.fator||1));
@@ -3060,7 +3220,8 @@ function _executarRegistroNFManual(numero, fornecedor, data){
     ${marcados>0?`<div style="margin-top:10px;font-size:0.78rem;color:var(--yellow)">🟡 ${marcados} item(s) marcados como FATURADOS.</div>`:''}
   </div>`;
 
-  linkNFToOrders(nfManualItens);
+  // Vincula NF apenas à OC selecionada
+  linkNFToSpecificOC(nfManualItens, ocId);
 
   nfManualItens = [];
   renderManualItens();
@@ -3074,6 +3235,9 @@ function _executarRegistroNFManual(numero, fornecedor, data){
   document.getElementById('mnf-valor').value='';
   document.getElementById('mnf-chave').value='';
   const sfSug=document.getElementById('mnf-forn-sug');if(sfSug)sfSug.style.display='none';
+  // Limpa campo OC
+  const mnfOcSearch=document.getElementById('mnf-oc-search');if(mnfOcSearch)mnfOcSearch.value='';
+  const mnfOcId=document.getElementById('mnf-oc-id');if(mnfOcId)mnfOcId.value='';
   // Navega para Recebimento (2ª etapa) de forma robusta
   _irParaRecebimento();
 }
@@ -3269,6 +3433,7 @@ async function loadMainState() {
         if(typeof o.itens === 'string') { try { o.itens = JSON.parse(o.itens); } catch(e){o.itens=[];} }
         return o;
       });
+      window.purchaseOrders = purchaseOrders; // mantém referência global sincronizada
     }
 
     if(Array.isArray(loadedVal) && loadedVal.length > 0) {
@@ -5948,6 +6113,15 @@ window.renderOCPage = function() {
         ${oc.status !== 'cancelada' ? `<button class="btn btn-sm btn-danger" onclick="cancelarOC('${oc.id}')">🚫 Cancelar</button>` : ''}
         <button class="btn btn-sm btn-danger" style="opacity:0.7" onclick="excluirOC('${oc.id}')">🗑️ Excluir</button>
       </div>
+      ${(() => {
+        // NFs vinculadas a esta OC
+        const nfsVinc = (window.nfHistory||[]).filter(n=>n.oc_id===oc.id);
+        if(!nfsVinc.length) return '';
+        return `<div style="margin-top:10px;padding:8px 10px;background:rgba(46,204,113,0.06);border:1px solid rgba(46,204,113,0.2);border-radius:6px;font-size:0.78rem">
+          <span style="color:var(--accent);font-weight:600">🧾 NFs vinculadas:</span>
+          ${nfsVinc.map(n=>`<span class="badge ${n.status==='entregue'?'badge-green':'badge-yellow'}" style="margin-left:6px">NF ${n.numero} ${n.status==='entregue'?'✅':'🟡'}</span>`).join('')}
+        </div>`;
+      })()}
     </div>
   `).join('');
 };
@@ -6232,6 +6406,59 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. RENDERIZAR HISTÓRICO DE NFs (com coluna de OC vinculada)
+// ─────────────────────────────────────────────────────────────────────────────
+
+window.renderNFHistorico = function() {
+  const tbody = document.getElementById('nf-hist-body');
+  if (!tbody) return;
+
+  const nfHist = window.nfHistory || [];
+  if (!nfHist.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:30px">Nenhuma NF registrada ainda.</td></tr>';
+    return;
+  }
+
+  // Ordena mais recente primeiro
+  const sorted = [...nfHist].sort((a, b) => b.id - a.id);
+
+  tbody.innerHTML = sorted.map(n => {
+    const isManual = n.origem === 'manual';
+    const fonteBadge = isManual
+      ? '<span class="badge badge-gray" style="margin-left:4px;font-size:0.65rem">✏️ Manual</span>'
+      : '<span class="badge badge-blue" style="margin-left:4px;font-size:0.65rem">📄 XML</span>';
+
+    // Busca OC vinculada
+    const oc = n.oc_id ? (window._ocList || []).find(o => o.id === n.oc_id) : null;
+    const ocCell = oc
+      ? `<span class="badge badge-gray" style="font-size:0.72rem">🗂️ ${oc.numero}</span>`
+      : '<span class="dim">—</span>';
+
+    const statusBadge = n.status === 'entregue'
+      ? '<span class="badge badge-green">🟢 Entregue</span>'
+      : n.status === 'suspensa'
+        ? '<span class="badge badge-red">🚫 Suspensa</span>'
+        : '<span class="badge badge-yellow">🟡 Faturado</span>';
+
+    const vinc = (n.itens || []).filter(i => i.matched?.length > 0).length;
+    const total = (n.itens || []).length;
+
+    return `<tr>
+      <td><b>${n.numero}</b>${fonteBadge}</td>
+      <td>${n.fornecedor || '—'}</td>
+      <td class="dim">${n.data || '—'}</td>
+      <td>${ocCell}</td>
+      <td><span class="badge badge-gray">${total} itens${vinc > 0 ? ' / ' + vinc + ' vinc.' : ''}</span></td>
+      <td>${statusBadge}</td>
+      <td style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-secondary" onclick="abrirVincularNFHistorico(${n.id})">🔗 Vínculos</button>
+        ${n.status !== 'entregue' ? `<button class="btn btn-sm btn-primary" onclick="confirmRecebimentoNF(${n.id})">✅ Confirmar</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+};
 
 console.log('✅ PATCH VILA NOVA carregado com sucesso!');
 
