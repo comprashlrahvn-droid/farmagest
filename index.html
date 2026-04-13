@@ -5373,24 +5373,32 @@ window.searchProdOCItem = function() {
   const res = allProds
     .filter(p => p.material && (p.material.toLowerCase().includes(q) || (p.cod_bionexo||'').toLowerCase().includes(q)))
     .slice(0, 10);
+  if (!res.length) { sug.innerHTML = '<div class="sug-item dim" style="padding:8px;font-size:0.78rem">Nenhum produto encontrado</div>'; return; }
   sug.innerHTML = res.map(p =>
-    `<div class="sug-item" onclick="selecionarProdOCItem(${p.id})">
+    `<div class="sug-item" data-pid="${p.id}" style="cursor:pointer;padding:7px 10px;">
       <b>${p.material}</b> <span class="dim">${p.cod_bionexo || ''}</span>
       ${p.pedido ? `<span class="badge badge-blue" style="margin-left:6px">Ped: ${p.pedido}</span>` : ''}
     </div>`
   ).join('');
+  // Attach click via addEventListener to avoid issues with special chars in names
+  sug.querySelectorAll('.sug-item[data-pid]').forEach(el => {
+    el.addEventListener('mousedown', function(e) {
+      e.preventDefault(); // prevent blur before click registers
+      selecionarProdOCItem(parseInt(this.dataset.pid));
+    });
+  });
 };
 
 window.selecionarProdOCItem = function(pid) {
-  const p = (window.products || []).find(x => x.id === pid);
+  const allProds = window.products || (typeof products !== 'undefined' ? products : []);
+  const p = allProds.find(x => x.id === pid || x.id == pid);
   if (!p) return;
-  document.getElementById('oc-item-prod-id').value = pid;
+  document.getElementById('oc-item-prod-id').value = p.id;
   document.getElementById('oc-item-search').value = p.material;
   document.getElementById('oc-item-desc').value = p.material;
   document.getElementById('oc-item-cod').value = p.cod_bionexo || '';
   document.getElementById('oc-item-prod-sel').innerHTML = `<span class="badge badge-yellow" style="margin-top:4px">🟡 ${p.material}</span>`;
   document.getElementById('oc-item-sug').innerHTML = '';
-  // Auto-preenche quantidade do pedido
   if (p.pedido) {
     document.getElementById('oc-item-qtd').value = p.pedido;
     calcItemTotalOC();
@@ -5406,12 +5414,14 @@ window.calcItemTotalOC = function() {
 };
 
 window.confirmarItemOC = function() {
-  const desc = document.getElementById('oc-item-desc').value.trim();
-  const qtd = parseFloat(document.getElementById('oc-item-qtd').value) || 0;
-  if (!desc) { alert('Informe a descrição do item.'); return; }
-  if (qtd <= 0) { alert('Informe a quantidade.'); return; }
   const pid = document.getElementById('oc-item-prod-id').value;
-  const prod = pid ? (window.products || []).find(x => x.id == pid) : null;
+  const prod = pid ? (window.products || (typeof products !== 'undefined' ? products : [])).find(x => x.id == pid) : null;
+  const descField = document.getElementById('oc-item-desc').value.trim();
+  // Descrição obrigatória apenas se não houver produto vinculado
+  const desc = descField || (prod ? prod.material : '');
+  const qtd = parseFloat(document.getElementById('oc-item-qtd').value) || 0;
+  if (!desc) { alert('Informe a descrição do item ou vincule um produto do estoque.'); return; }
+  if (qtd <= 0) { alert('Informe a quantidade.'); return; }
   const vunit = parseFloat(document.getElementById('oc-item-vunit').value) || 0;
   const item = {
     prod_id: pid || null,
