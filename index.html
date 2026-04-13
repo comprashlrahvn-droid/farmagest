@@ -2524,29 +2524,33 @@ function exportarEstoquePDF(){
       drawColHeader(y);
       y+=3+ROW_H;
     }
-    // zebra
-    if(i%2===0){doc.setFillColor(22,50,36);doc.rect(MARGIN,y-ROW_H+1,PAGE_W-MARGIN*2,ROW_H,'F');}
+    // zebra — linhas pares: fundo verde escuro (texto claro); linhas ímpares: fundo branco (texto escuro)
+    const isDark=i%2===0;
+    if(isDark){doc.setFillColor(22,50,36);doc.rect(MARGIN,y-ROW_H+1,PAGE_W-MARGIN*2,ROW_H,'F');}
+    else{doc.setFillColor(255,255,255);doc.rect(MARGIN,y-ROW_H+1,PAGE_W-MARGIN*2,ROW_H,'F');}
+    const textMain=isDark?[220,240,228]:[30,30,30];
+    const textDim =isDark?[150,195,168]:[90,90,90];
     doc.setFont('helvetica','normal');
     doc.setFontSize(6.8);
     // Material
-    doc.setTextColor(220,240,228);
+    doc.setTextColor(textMain[0],textMain[1],textMain[2]);
     doc.text((r.material).substring(0,44),cols[0].x,y);
     // Cod
-    doc.setTextColor(150,195,168);
+    doc.setTextColor(textDim[0],textDim[1],textDim[2]);
     doc.text(r.cod,cols[1].x,y);
-    // Saldo
-    const saldoColor=r.saldo<=0?[231,76,60]:r.min>0&&r.saldo<=r.min?[243,156,18]:[220,240,228];
+    // Saldo — mantém cor de alerta em ambos os fundos
+    const saldoColor=r.saldo<=0?[200,50,40]:r.min>0&&r.saldo<=r.min?[180,110,0]:textMain;
     doc.setTextColor(saldoColor[0],saldoColor[1],saldoColor[2]);
     doc.text(String(r.saldo),cols[2].x,y);
     // Min
-    doc.setTextColor(220,240,228);
+    doc.setTextColor(textMain[0],textMain[1],textMain[2]);
     doc.text(r.min>0?String(r.min):'—',cols[3].x,y);
     // Consumo
     doc.text(r.consumo>0?r.consumo.toFixed(1)+'/mês':'—',cols[4].x,y);
     // Cobertura
     doc.text(r.cobertura!==null?r.cobertura+' dias':'—',cols[5].x,y);
     // Status
-    const sc=r.status==='OK'?[39,174,96]:r.status==='Baixo'?[243,156,18]:[231,76,60];
+    const sc=r.status==='OK'?[22,140,60]:r.status==='Baixo'?[160,100,0]:[180,40,30];
     doc.setTextColor(sc[0],sc[1],sc[2]);
     doc.text(r.status,cols[6].x,y);
   });
