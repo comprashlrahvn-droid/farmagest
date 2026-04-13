@@ -706,6 +706,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
           <button class="btn btn-primary" onclick="openModalMovimento('entrada')">+ Entrada</button>
           <button class="btn btn-warning" onclick="openModalMovimento('saida')">− Saída</button>
           <button class="btn btn-secondary" onclick="exportarEstoquePDF()" title="Baixar lista completa em PDF">📄 PDF</button>
+          <button class="btn btn-secondary" onclick="exportarEstoqueXLS()" title="Baixar lista completa em XLS">📊 XLS</button>
         </div>
         <div class="table-wrap">
           <div class="table-header"><span class="table-header-title" id="estoque-count">—</span></div>
@@ -2455,95 +2456,131 @@ function renderSugestao(){
   }).join('')}</tbody></table></div>`;
 }
 
-function exportarEstoquePDF(){
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-  const data=new Date().toLocaleDateString('pt-BR');
-  // Header
-  doc.setFillColor(26,92,56);
-  doc.rect(0,0,297,18,'F');
-  doc.setTextColor(255,255,255);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(12);
-  doc.text('Associação Hospitalar Vila Nova — Gestão de Estoque',10,11);
-  doc.setFontSize(9);
-  doc.text(`Emitido em: ${data}`,240,11);
-  // Table header
-  const cols=[
-    {h:'Material',w:80,x:10},
-    {h:'Cód. Bionexo',w:28,x:90},
-    {h:'Est. Atual',w:22,x:118},
-    {h:'Est. Mínimo',w:24,x:140},
-    {h:'Consumo/Mês',w:28,x:164},
-    {h:'Cobertura',w:24,x:192},
-    {h:'Status',w:26,x:216}
-  ];
-  let y=24;
-  doc.setFillColor(40,100,65);
-  doc.rect(8,y-5,281,7,'F');
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica','bold');
-  cols.forEach(c=>doc.text(c.h,c.x,y));
-  // Rows
-  const allProds=(window.products||[]).filter(p=>p.material);
-  let row=0;
-  y+=3;
-  allProds.forEach(p=>{
+function _buildEstoqueRows(){
+  // Monta os dados de estoque no momento da chamada, usando as globais já carregadas
+  const diasPeriodo=parseInt((document.getElementById('sug-periodo')||{}).value||90);
+  return (products||[]).filter(p=>p.material).map(p=>{
     const saldo=getEstoque(p.id);
     const min=p.estoque_min||0;
-    const consumo=getConsumoMedio(p.id,90);
-    const cobertura=consumo>0?Math.round(saldo/consumo*30):null;
+    const consumo=getConsumoMedio(p.id,diasPeriodo);
+    const cobertura=consumo>0?Math.round((saldo/consumo)*30):null;
     let status='Zerado';
     if(saldo>0&&saldo<=min)status='Baixo';
     else if(saldo>min)status='OK';
-    y+=6;
-    if(y>192){
-      doc.addPage();
-      y=14;
-      // repeat header on new page
-      doc.setFillColor(26,92,56);
-      doc.rect(0,0,297,12,'F');
-      doc.setTextColor(255,255,255);
-      doc.setFont('helvetica','bold');
-      doc.setFontSize(8);
-      doc.text('Associação Hospitalar Vila Nova — Gestão de Estoque (continuação)',10,8);
-      y=22;
-      doc.setFillColor(40,100,65);
-      doc.rect(8,y-5,281,7,'F');
-      doc.setTextColor(255,255,255);
-      doc.setFontSize(7.5);
-      cols.forEach(c=>doc.text(c.h,c.x,y));
-      y+=3;
-    }
-    // alternating row bg
-    if(row%2===0){doc.setFillColor(18,43,31);doc.rect(8,y-4,281,6,'F');}
-    doc.setFont('helvetica','normal');
-    const statusColor=status==='OK'?[39,174,96]:status==='Baixo'?[243,156,18]:[231,76,60];
-    doc.setTextColor(statusColor[0],statusColor[1],statusColor[2]);
-    doc.setFontSize(7);
-    doc.text(status,cols[6].x,y);
-    doc.setTextColor(220,240,225);
-    const mat=(p.material||'').substring(0,38);
-    doc.text(mat,cols[0].x,y);
-    doc.setTextColor(160,200,175);
-    doc.text(p.cod_bionexo||'—',cols[1].x,y);
-    doc.setTextColor(220,240,225);
-    doc.text(String(saldo),cols[2].x,y);
-    doc.text(min>0?String(min):'—',cols[3].x,y);
-    doc.text(consumo>0?consumo.toFixed(1)+'un':'—',cols[4].x,y);
-    doc.text(cobertura!==null?cobertura+' dias':'—',cols[5].x,y);
-    row++;
+    return{material:p.material,cod:p.cod_bionexo||'—',saldo,min,consumo,cobertura,status};
   });
-  // footer
-  doc.setTextColor(120,160,130);
-  doc.setFontSize(7);
-  const totalPags=doc.getNumberOfPages();
-  for(let i=1;i<=totalPags;i++){
-    doc.setPage(i);
-    doc.text(`${allProds.length} produtos | Página ${i} de ${totalPags}`,10,205);
+}
+
+function exportarEstoquePDF(){
+  const rows=_buildEstoqueRows();
+  if(!rows.length){alert('Nenhum produto cadastrado para exportar.');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const dataStr=new Date().toLocaleDateString('pt-BR');
+  const PAGE_W=297, MARGIN=8, ROW_H=6, HEAD_H=8;
+  const cols=[
+    {h:'Material',      x:MARGIN,    w:82},
+    {h:'Cód. Bionexo',  x:92,        w:27},
+    {h:'Est. Atual',    x:121,       w:20},
+    {h:'Est. Mínimo',   x:143,       w:22},
+    {h:'Consumo/Mês',   x:167,       w:25},
+    {h:'Cobertura',     x:194,       w:22},
+    {h:'Status',        x:218,       w:24}
+  ];
+
+  function drawPageHeader(){
+    doc.setFillColor(26,92,56);
+    doc.rect(0,0,PAGE_W,16,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    doc.text('Associação Hospitalar Vila Nova — Gestão de Estoque',MARGIN,10);
+    doc.setFontSize(8);
+    doc.text('Emitido em: '+dataStr,220,10);
+    doc.setFontSize(7.5);
+    doc.text(rows.length+' produtos cadastrados',MARGIN,14.5);
   }
-  doc.save(`Estoque_Vila_Nova_${data.replace(/\//g,'-')}.pdf`);
+
+  function drawColHeader(y){
+    doc.setFillColor(34,85,55);
+    doc.rect(MARGIN,y-HEAD_H+1,PAGE_W-MARGIN*2,HEAD_H,'F');
+    doc.setTextColor(200,235,210);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    cols.forEach(c=>doc.text(c.h,c.x,y));
+  }
+
+  drawPageHeader();
+  let y=24;
+  drawColHeader(y);
+  y+=3;
+
+  rows.forEach((r,i)=>{
+    y+=ROW_H;
+    if(y>198){
+      doc.addPage();
+      drawPageHeader();
+      y=24;
+      drawColHeader(y);
+      y+=3+ROW_H;
+    }
+    // zebra
+    if(i%2===0){doc.setFillColor(22,50,36);doc.rect(MARGIN,y-ROW_H+1,PAGE_W-MARGIN*2,ROW_H,'F');}
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.8);
+    // Material
+    doc.setTextColor(220,240,228);
+    doc.text((r.material).substring(0,44),cols[0].x,y);
+    // Cod
+    doc.setTextColor(150,195,168);
+    doc.text(r.cod,cols[1].x,y);
+    // Saldo
+    const saldoColor=r.saldo<=0?[231,76,60]:r.min>0&&r.saldo<=r.min?[243,156,18]:[220,240,228];
+    doc.setTextColor(saldoColor[0],saldoColor[1],saldoColor[2]);
+    doc.text(String(r.saldo),cols[2].x,y);
+    // Min
+    doc.setTextColor(220,240,228);
+    doc.text(r.min>0?String(r.min):'—',cols[3].x,y);
+    // Consumo
+    doc.text(r.consumo>0?r.consumo.toFixed(1)+'/mês':'—',cols[4].x,y);
+    // Cobertura
+    doc.text(r.cobertura!==null?r.cobertura+' dias':'—',cols[5].x,y);
+    // Status
+    const sc=r.status==='OK'?[39,174,96]:r.status==='Baixo'?[243,156,18]:[231,76,60];
+    doc.setTextColor(sc[0],sc[1],sc[2]);
+    doc.text(r.status,cols[6].x,y);
+  });
+
+  // rodapé em todas as páginas
+  const totalPags=doc.getNumberOfPages();
+  for(let p=1;p<=totalPags;p++){
+    doc.setPage(p);
+    doc.setTextColor(100,140,115);
+    doc.setFontSize(6.5);
+    doc.text(`Página ${p} de ${totalPags}  |  Vila Nova — Sistema de Gestão de Estoque`,MARGIN,207);
+  }
+  doc.save('Estoque_Vila_Nova_'+dataStr.replace(/\//g,'-')+'.pdf');
+}
+
+function exportarEstoqueXLS(){
+  const rows=_buildEstoqueRows();
+  if(!rows.length){alert('Nenhum produto cadastrado para exportar.');return;}
+  const planilha=rows.map(r=>({
+    'MATERIAL':r.material,
+    'CÓD. BIONEXO':r.cod,
+    'ESTOQUE ATUAL':r.saldo,
+    'ESTOQUE MÍNIMO':r.min||'',
+    'CONSUMO MÉDIO/MÊS':r.consumo>0?parseFloat(r.consumo.toFixed(1)):'',
+    'COBERTURA (dias)':r.cobertura!==null?r.cobertura:'',
+    'STATUS':r.status
+  }));
+  const ws=XLSX.utils.json_to_sheet(planilha);
+  // Largura das colunas
+  ws['!cols']=[{wch:45},{wch:16},{wch:14},{wch:15},{wch:20},{wch:16},{wch:10}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Estoque');
+  const dataStr=new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
+  XLSX.writeFile(wb,'Estoque_Vila_Nova_'+dataStr+'.xlsx');
 }
 
 function exportarSugestaoXLS(){
