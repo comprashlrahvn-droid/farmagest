@@ -705,6 +705,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
           </select>
           <button class="btn btn-primary" onclick="openModalMovimento('entrada')">+ Entrada</button>
           <button class="btn btn-warning" onclick="openModalMovimento('saida')">− Saída</button>
+          <button class="btn btn-secondary" onclick="exportarEstoquePDF()" title="Baixar lista completa em PDF">📄 PDF</button>
         </div>
         <div class="table-wrap">
           <div class="table-header"><span class="table-header-title" id="estoque-count">—</span></div>
@@ -738,11 +739,10 @@ textarea.form-input{min-height:80px;resize:vertical;}
             <option value="180">Últimos 6 meses</option>
           </select>
           <label style="font-size:0.82rem;color:var(--text2)">Cobertura desejada:</label>
-          <select class="filter-select" id="sug-cobertura" onchange="renderSugestao()">
-            <option value="30">30 dias</option>
-            <option value="60" selected>60 dias</option>
-            <option value="90">90 dias</option>
-          </select>
+          <div style="display:flex;align-items:center;gap:4px">
+            <input type="number" min="1" max="999" value="60" id="sug-cobertura" onchange="renderSugestao()" oninput="renderSugestao()" style="width:72px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:8px;font-size:0.82rem;outline:none;font-family:'DM Sans';text-align:center">
+            <span style="font-size:0.82rem;color:var(--text2)">dias</span>
+          </div>
           <button class="btn btn-warning" onclick="exportarSugestaoXLS()">⬇ XLS Sugestão</button>
         </div>
         <div id="sugestao-body"></div>
@@ -2453,6 +2453,97 @@ function renderSugestao(){
       <td>${pri}</td>
     </tr>`;
   }).join('')}</tbody></table></div>`;
+}
+
+function exportarEstoquePDF(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const data=new Date().toLocaleDateString('pt-BR');
+  // Header
+  doc.setFillColor(26,92,56);
+  doc.rect(0,0,297,18,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text('Associação Hospitalar Vila Nova — Gestão de Estoque',10,11);
+  doc.setFontSize(9);
+  doc.text(`Emitido em: ${data}`,240,11);
+  // Table header
+  const cols=[
+    {h:'Material',w:80,x:10},
+    {h:'Cód. Bionexo',w:28,x:90},
+    {h:'Est. Atual',w:22,x:118},
+    {h:'Est. Mínimo',w:24,x:140},
+    {h:'Consumo/Mês',w:28,x:164},
+    {h:'Cobertura',w:24,x:192},
+    {h:'Status',w:26,x:216}
+  ];
+  let y=24;
+  doc.setFillColor(40,100,65);
+  doc.rect(8,y-5,281,7,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica','bold');
+  cols.forEach(c=>doc.text(c.h,c.x,y));
+  // Rows
+  const allProds=(window.products||[]).filter(p=>p.material);
+  let row=0;
+  y+=3;
+  allProds.forEach(p=>{
+    const saldo=getEstoque(p.id);
+    const min=p.estoque_min||0;
+    const consumo=getConsumoMedio(p.id,90);
+    const cobertura=consumo>0?Math.round(saldo/consumo*30):null;
+    let status='Zerado';
+    if(saldo>0&&saldo<=min)status='Baixo';
+    else if(saldo>min)status='OK';
+    y+=6;
+    if(y>192){
+      doc.addPage();
+      y=14;
+      // repeat header on new page
+      doc.setFillColor(26,92,56);
+      doc.rect(0,0,297,12,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      doc.text('Associação Hospitalar Vila Nova — Gestão de Estoque (continuação)',10,8);
+      y=22;
+      doc.setFillColor(40,100,65);
+      doc.rect(8,y-5,281,7,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(7.5);
+      cols.forEach(c=>doc.text(c.h,c.x,y));
+      y+=3;
+    }
+    // alternating row bg
+    if(row%2===0){doc.setFillColor(18,43,31);doc.rect(8,y-4,281,6,'F');}
+    doc.setFont('helvetica','normal');
+    const statusColor=status==='OK'?[39,174,96]:status==='Baixo'?[243,156,18]:[231,76,60];
+    doc.setTextColor(statusColor[0],statusColor[1],statusColor[2]);
+    doc.setFontSize(7);
+    doc.text(status,cols[6].x,y);
+    doc.setTextColor(220,240,225);
+    const mat=(p.material||'').substring(0,38);
+    doc.text(mat,cols[0].x,y);
+    doc.setTextColor(160,200,175);
+    doc.text(p.cod_bionexo||'—',cols[1].x,y);
+    doc.setTextColor(220,240,225);
+    doc.text(String(saldo),cols[2].x,y);
+    doc.text(min>0?String(min):'—',cols[3].x,y);
+    doc.text(consumo>0?consumo.toFixed(1)+'un':'—',cols[4].x,y);
+    doc.text(cobertura!==null?cobertura+' dias':'—',cols[5].x,y);
+    row++;
+  });
+  // footer
+  doc.setTextColor(120,160,130);
+  doc.setFontSize(7);
+  const totalPags=doc.getNumberOfPages();
+  for(let i=1;i<=totalPags;i++){
+    doc.setPage(i);
+    doc.text(`${allProds.length} produtos | Página ${i} de ${totalPags}`,10,205);
+  }
+  doc.save(`Estoque_Vila_Nova_${data.replace(/\//g,'-')}.pdf`);
 }
 
 function exportarSugestaoXLS(){
@@ -5052,7 +5143,7 @@ function adicionarModalOC() {
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label">Produto (Estoque) — opcional</label>
-        <input class="form-input" id="oc-item-search" placeholder="Buscar produto vinculado..." oninput="searchProdOCItem()" autocomplete="off">
+        <input class="form-input" id="oc-item-search" placeholder="Buscar produto vinculado..." oninput="searchProdOCItem()" onfocus="searchProdOCItem()" autocomplete="off">
         <div id="oc-item-sug" style="max-height:180px;overflow-y:auto;margin-top:4px"></div>
         <input type="hidden" id="oc-item-prod-id">
         <div id="oc-item-prod-sel" style="margin-top:4px"></div>
@@ -5236,10 +5327,11 @@ window.abrirModalAddItemOC = function(idx) {
 window.searchProdOCItem = function() {
   const q = document.getElementById('oc-item-search').value.toLowerCase();
   const sug = document.getElementById('oc-item-sug');
-  if (q.length < 2) { sug.innerHTML = ''; return; }
-  const res = (window.products || [])
+  const allProds = window.products || (typeof products !== 'undefined' ? products : []);
+  if (q.length < 1) { sug.innerHTML = allProds.length === 0 ? '<div class="sug-item dim" style="padding:8px;font-size:0.78rem">Nenhum produto cadastrado</div>' : ''; return; }
+  const res = allProds
     .filter(p => p.material && (p.material.toLowerCase().includes(q) || (p.cod_bionexo||'').toLowerCase().includes(q)))
-    .slice(0, 8);
+    .slice(0, 10);
   sug.innerHTML = res.map(p =>
     `<div class="sug-item" onclick="selecionarProdOCItem(${p.id})">
       <b>${p.material}</b> <span class="dim">${p.cod_bionexo || ''}</span>
