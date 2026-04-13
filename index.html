@@ -1223,15 +1223,29 @@ function renderTags(){
 }
 function addMarca(t){const inp=document.getElementById(`inp-${t}`),v=inp.value.trim();if(!v)return;if(t==='pad')tempPad.push(v);else tempDesq.push(v);inp.value='';renderTags();}
 function rmMarca(t,i){if(t==='pad')tempPad.splice(i,1);else tempDesq.splice(i,1);renderTags();}
-function saveProd(){
+async function saveProd(){
   const mat=document.getElementById('mprod-material').value.trim();
   if(!mat){alert('Nome do material obrigatório!');return;}
   const val=document.getElementById('mprod-validade').value,comp=document.getElementById('mprod-compra').value,lote=document.getElementById('mprod-lote').value;
+
   if(editingProdId){
     const p=products.find(x=>x.id===editingProdId);
     Object.assign(p,{cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),validade:val,data_compra:comp,lote});
+    // Salva imediatamente no Google Sheets (update)
+    try {
+      showLoading('Salvando produto...');
+      await gsUpdate('products', editingProdId, p);
+    } catch(e){ console.warn('Erro ao atualizar produto no GS:', e); }
+    finally { hideLoading(); }
   } else {
-    products.push({id:Date.now(),cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,pedido:null,urgente:'',marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),status:'normal',validade:val,data_compra:comp,lote});
+    const novoProd = {id:Date.now(),cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,pedido:null,urgente:'',marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),status:'normal',validade:val,data_compra:comp,lote};
+    products.push(novoProd);
+    // Salva imediatamente no Google Sheets (insert)
+    try {
+      showLoading('Cadastrando produto...');
+      await gsInsert('products', novoProd);
+    } catch(e){ console.warn('Erro ao inserir produto no GS:', e); }
+    finally { hideLoading(); }
   }
   closeModal('modal-prod');renderProdutos();renderValidade();renderDashboard();
   saveMainState();
@@ -3513,27 +3527,23 @@ async function loadMainState() {
     ]);
 
     if(Array.isArray(loadedProducts) && loadedProducts.length > 0) {
-      // Mescla produtos salvos com o catálogo base (PRODUCTS_RAW)
-      const baseById = {};
-      PRODUCTS_RAW.forEach(p => { baseById[p.id] = {...p}; });
+      // GS é a fonte autoritativa — corrige tipos e usa diretamente
       const savedById = {};
       loadedProducts.forEach(p => {
-        // Corrige tipos numéricos que o GS converte para string
         if(p.id) p.id = isNaN(p.id) ? p.id : Number(p.id);
         if(p.pedido !== undefined && p.pedido !== null && p.pedido !== '') p.pedido = Number(p.pedido)||null;
         if(p.qty_faturada !== undefined) p.qty_faturada = Number(p.qty_faturada)||0;
         if(p.estoque_min !== undefined) p.estoque_min = Number(p.estoque_min)||0;
         savedById[p.id] = p;
       });
-      // Aplica dados salvos sobre o catálogo base
-      products = PRODUCTS_RAW.map(p => savedById[p.id] ? {...p, ...savedById[p.id]} : {...p});
-      // Produtos novos (não estão no RAW)
-      const maxRawId = Math.max(...PRODUCTS_RAW.map(p=>p.id));
-      loadedProducts.forEach(p => {
-        if(!baseById[p.id]) {
-          if(!products.find(x=>x.id==p.id)) products.push(p);
-        }
-      });
+      // PRODUCTS_RAW fornece campos padrão; GS sobrescreve com dados reais
+      const baseById = {};
+      PRODUCTS_RAW.forEach(p => { baseById[p.id] = {...p}; });
+      // Lista final = todos os produtos do GS (inclui novos de qualquer usuário)
+      products = loadedProducts.map(p => baseById[p.id] ? {...baseById[p.id], ...p} : {...p});
+    } else {
+      // GS vazio (primeira vez) — usa catálogo base como ponto de partida
+      products = JSON.parse(JSON.stringify(PRODUCTS_RAW));
     }
 
     if(Array.isArray(loadedNF) && loadedNF.length > 0) {
