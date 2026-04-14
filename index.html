@@ -2029,13 +2029,6 @@ function confEntr(id){
           if(real){real.status='entregue';count++;}
         });
       });
-      // Entrada automática no estoque
-      nf.itens?.forEach(it=>{
-        if(!it.matched?.length)return;
-        const prod=products.find(p=>p.id==it.matched[0].id);if(!prod)return;
-        const qtdUn=it.qty_unidades_final||calcQtdUn(it);
-        if(qtdUn>0){const s=getEstoque(prod.id);movimentos.push({id:Date.now()+Math.random(),tipo:'entrada',prod_id:prod.id,qtd:qtdUn,data:nf.data||new Date().toISOString().substring(0,10),resp:'Sistema (NF '+nf.numero+')',obs:'Entrada automática — NF '+nf.numero,saldo_apos:s+qtdUn});}
-      });
       linkDeliveryToOrders(nf);
       const res=document.getElementById('receb-result');
       if(res)res.innerHTML=`<div class="alert alert-success">✅ NF <b>${nf.numero}</b> confirmada! ${count} item(s) marcado(s) como 🟢 ENTREGUE.</div>`;
