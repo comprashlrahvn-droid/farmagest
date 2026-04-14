@@ -2656,7 +2656,11 @@ function searchMovProd(){
 }
 function selMovProd(id,mat){document.getElementById('mmov-prod-id').value=id;document.getElementById('mmov-search').value=mat;document.getElementById('mmov-suggestions').innerHTML='';}
 
+let _savingMovimento = false;
 function saveMovimento(){
+  if(_savingMovimento) return;
+  _savingMovimento = true;
+  setTimeout(() => { _savingMovimento = false; }, 2000);
   if(_movTipo==='config'){
     const id=document.getElementById('mmov-prod-id').value;
     const min=parseFloat(document.getElementById('mmov-estmin').value)||0;
@@ -2682,7 +2686,7 @@ function saveMovimento(){
     saldo_apos
   });
   closeModal('modal-movimento');renderEstoque();renderMovimentos();updateCriticosBadge();renderDashboard();
-  saveMainState();
+  saveMainState(true);
 }
 
 // ── ITENS CRÍTICOS ──────────────────────────────────────────────────────────
@@ -3091,7 +3095,10 @@ function linkDeliveryToOrders(nfEntry){
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function renderPag(cid,total,cur,onP){const pages=Math.ceil(total/PAGE_SIZE);if(pages<=1){document.getElementById(cid).innerHTML='';return;}let h=`<span class="page-info">Total: ${total}</span>`;if(cur>1)h+=`<button class="page-btn" onclick="(${onP})(${cur-1})">‹</button>`;const s=Math.max(1,cur-2),e=Math.min(pages,cur+2);for(let i=s;i<=e;i++)h+=`<button class="page-btn ${i===cur?'cur':''}" onclick="(${onP})(${i})">${i}</button>`;if(cur<pages)h+=`<button class="page-btn" onclick="(${onP})(${cur+1})">›</button>`;document.getElementById(cid).innerHTML=h;}
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  if(id==='modal-movimento') _savingMovimento = false;
+}
 function switchTab(page,tab,el){
   const container=page==='vef'
     ?document.getElementById('modal-vincular-ef')
@@ -3466,11 +3473,14 @@ async function gsLoadArray(sheet) {
 
 // Salva estado principal — uma chamada por entidade modificada
 let _saveTimer = null;
-function saveMainState() {
-  // Debounce: agrupa múltiplas chamadas em 1 segundo
+let _savePending = false;
+function saveMainState(immediate=false) {
+  _savePending = true;
   if(_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => _doSaveMainState(), 1000);
+  const delay = immediate ? 100 : 1000;
+  _saveTimer = setTimeout(() => { _savePending = false; _doSaveMainState(); }, delay);
 }
+window._isSavePending = () => _savePending;
 
 async function _doSaveMainState() {
   try {
@@ -3549,7 +3559,9 @@ async function loadMainState() {
       });
     }
 
-    if(Array.isArray(loadedMov) && loadedMov.length > 0) {
+    // Só sobrescreve movimentos se NÃO há um save local pendente.
+    // Se há save pendente, os dados em memória são mais recentes que o servidor.
+    if(Array.isArray(loadedMov) && loadedMov.length > 0 && !_savePending) {
       movimentos = loadedMov.map(m => {
         if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
         if(m.saldo_apos !== undefined) m.saldo_apos = Number(m.saldo_apos)||0;
@@ -3738,6 +3750,8 @@ function showApp() {
   // Re-render dashboard e badges com dados já carregados
   renderDashboard();
   renderPedidos();
+  renderEstoque();
+  renderMovimentos();
   updateBadges();
   updateOrdersBadge();
   // Menu Usuários: visível SOMENTE para o administrador master
@@ -6356,12 +6370,14 @@ function iniciarSincronizacao() {
     await sincronizarDados();
   }, SYNC_INTERVAL_MS);
 
-  // Sincroniza imediatamente ao iniciar
-  setTimeout(sincronizarDados, 3000);
+  // Sincroniza após delay suficiente para saves iniciais concluírem
+  setTimeout(sincronizarDados, 8000);
 }
 
 async function sincronizarDados() {
   if (!window.gsLoadArray || !window.currentUser) return;
+  // Não sincroniza se houver um save local pendente (evita sobrescrever dados não salvos)
+  if (window._isSavePending && window._isSavePending()) return;
   try {
     // Força recarregamento do estado principal
     await window.loadMainState();
