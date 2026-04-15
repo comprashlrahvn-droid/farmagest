@@ -1022,7 +1022,6 @@ textarea.form-input{min-height:80px;resize:vertical;}
         <div class="form-group"><label class="form-label">Quantidade *</label><input class="form-input" type="number" min="1" id="mmov-qtd" placeholder="0"></div>
         <div class="form-group"><label class="form-label">Data</label><input class="form-input" type="date" id="mmov-data"></div>
       </div>
-      <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="mmov-resp" placeholder="Nome do responsável"></div>
       <div class="form-group"><label class="form-label">Observação</label><input class="form-input" id="mmov-obs" placeholder="NF, motivo..."></div>
       <div class="form-group" id="mmov-estmin-wrap" style="display:none">
         <label class="form-label">Estoque Mínimo</label>
@@ -2617,7 +2616,6 @@ function openModalMovimento(tipo, prodId=null){
   document.getElementById('mmov-btn').className='btn '+(tipo==='entrada'?'btn-primary':'btn-warning');
   document.getElementById('mmov-data').value=new Date().toISOString().split('T')[0];
   document.getElementById('mmov-qtd').value='';
-  document.getElementById('mmov-resp').value='';
   document.getElementById('mmov-obs').value='';
   document.getElementById('mmov-estmin-wrap').style.display=tipo==='entrada'?'block':'none';
   if(prodId){
@@ -2642,7 +2640,6 @@ function openModalEstMin(prodId){
   document.getElementById('mmov-search').value=p.material;
   document.getElementById('mmov-suggestions').innerHTML='';
   document.getElementById('mmov-qtd').value='';
-  document.getElementById('mmov-resp').value='';
   document.getElementById('mmov-obs').value='';
   document.getElementById('mmov-estmin-wrap').style.display='block';
   document.getElementById('mmov-estmin').value=p.estoque_min||'';
@@ -2681,7 +2678,7 @@ function saveMovimento(){
   movimentos.push({
     id:Date.now(),tipo:_movTipo,prod_id:parseInt(id),qtd,
     data:document.getElementById('mmov-data').value,
-    resp:document.getElementById('mmov-resp').value,
+    resp:currentUser?.name||'Sistema',
     obs:document.getElementById('mmov-obs').value,
     saldo_apos
   });
