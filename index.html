@@ -2684,6 +2684,7 @@ function saveMovimento(){
     obs:document.getElementById('mmov-obs').value,
     saldo_apos
   });
+  _lastMovSaveTime = Date.now();
   closeModal('modal-movimento');renderEstoque();renderMovimentos();updateCriticosBadge();renderDashboard();
   saveMainState(true);
 }
@@ -3478,6 +3479,7 @@ async function gsLoadArray(sheet) {
 // Salva estado principal — uma chamada por entidade modificada
 let _saveTimer = null;
 let _savePending = false;
+let _lastMovSaveTime = 0; // timestamp of last local movimento save
 function saveMainState(immediate=false) {
   _savePending = true;
   if(_saveTimer) clearTimeout(_saveTimer);
@@ -3563,9 +3565,10 @@ async function loadMainState() {
       });
     }
 
-    // Só sobrescreve movimentos se NÃO há um save local pendente.
-    // Se há save pendente, os dados em memória são mais recentes que o servidor.
-    if(Array.isArray(loadedMov) && loadedMov.length > 0 && !_savePending) {
+    // Só sobrescreve movimentos se NÃO há save local pendente E se não houve save recente (60s).
+    // Isso evita que a sincronização automática sobrescreva movimentos antes do GAS confirmar.
+    const _movRecentSave = (Date.now() - _lastMovSaveTime) < 60000;
+    if(Array.isArray(loadedMov) && loadedMov.length > 0 && !_savePending && !_movRecentSave) {
       movimentos = loadedMov.map(m => {
         if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
         if(m.saldo_apos !== undefined) m.saldo_apos = Number(m.saldo_apos)||0;
@@ -3778,6 +3781,50 @@ async function initApp() {
   }
 }
 
+
+// ── CARGA INICIAL DA PLANILHA (14/04/2026) ───────────────────────────────────
+// Limpa movimentos duplicados e carrega saldos corretos da planilha
+function carregarEstoquePlanilha() {
+  const PLANILHA_KEY = 'estoque_planilha_14042026_v1';
+  // Só executa uma vez por instalação
+  if(localStorage.getItem(PLANILHA_KEY)) return;
+
+  const dadosPlanilha = [{"material": "ACIDO URSODESOXICOLICO 150 MG", "cod_bionexo": "HLR166", "qty": 60}, {"material": "AAS 100MG CP", "cod_bionexo": "43", "qty": 500}, {"material": "ACICLOVIR 200 CP", "cod_bionexo": "1", "qty": 60}, {"material": "ALBENDAZOL 400MG", "cod_bionexo": "1714", "qty": 10}, {"material": "ALOPURINOL 100MG CP", "cod_bionexo": "1540", "qty": 60}, {"material": "AMIODARONA CLORIDRATO 200MG CP", "cod_bionexo": "215", "qty": 100}, {"material": "AMOXICILINA 500MG + CLAVULANATO 125MG COMP", "cod_bionexo": "24536", "qty": 12}, {"material": "AMOXICILINA 500MG CAP", "cod_bionexo": "5", "qty": 42}, {"material": "ANLODIPINO BESILATO 5MG CP", "cod_bionexo": "1507", "qty": 90}, {"material": "ATENOLOL 50MG CP", "cod_bionexo": "1542", "qty": 120}, {"material": "AZITROMICINA 500MG CP", "cod_bionexo": "2093", "qty": 70}, {"material": "BISACODIL 5MG CP", "cod_bionexo": "258", "qty": 160}, {"material": "CAPTOPRIL 25MG CP", "cod_bionexo": "241", "qty": 630}, {"material": "CAPTOPRIL 50MG COMP", "cod_bionexo": "HLR330", "qty": 30}, {"material": "CARBONATO DE CALCIO 600MG", "cod_bionexo": "CARBONATODECALCIO", "qty": 120}, {"material": "CARVEDILOL 3,125MG CP", "cod_bionexo": "22057", "qty": 30}, {"material": "CARVEDILOL 6,25 CP", "cod_bionexo": "20823", "qty": 90}, {"material": "CETOPROFENO 50MG CAPS", "cod_bionexo": "CB11", "qty": 48}, {"material": "CILOSTAZOL 50MG CP", "cod_bionexo": "1573", "qty": 180}, {"material": "CLONIDINA CLORIDRATO 150MCG CP", "cod_bionexo": "293", "qty": 60}, {"material": "COLCHICINA 0,5MG COMP", "cod_bionexo": "HRES 28", "qty": 60}, {"material": "DEXAMETASONA 4MG CP", "cod_bionexo": "1715", "qty": 140}, {"material": "DICLOFENACO DE SODIO 50MG CP", "cod_bionexo": "272", "qty": 40}, {"material": "DIGOXINA 0,25MG CP", "cod_bionexo": "243", "qty": 40}, {"material": "DIPIRONA SODICA 500MG CP", "cod_bionexo": "48", "qty": 240}, {"material": "DOXASOZINA 2MG CP", "cod_bionexo": "249446", "qty": 60}, {"material": "ENALAPRIL MALEATO 10MG CP", "cod_bionexo": "246", "qty": 280}, {"material": "ENALAPRIL MALEATO 20MG CP", "cod_bionexo": "1623", "qty": 160}, {"material": "ESCOPOLAMINA (HIOSCINA) 10MG CP", "cod_bionexo": "138", "qty": 160}, {"material": "ESPIRONOLACTONA 25MG CP", "cod_bionexo": "295", "qty": 90}, {"material": "FLUCONAZOL 150MG CAP", "cod_bionexo": "1961", "qty": 92}, {"material": "FUROSEMIDA 40MG CP", "cod_bionexo": "299", "qty": 180}, {"material": "GLIBENCLAMIDA 5MG CP", "cod_bionexo": "620", "qty": 560}, {"material": "HIDRALAZINA 25MG COMP", "cod_bionexo": "21353", "qty": 100}, {"material": "HIDRALAZINA CLORIDRATO 50MG CP", "cod_bionexo": "533", "qty": 120}, {"material": "ISOSSORBIDA DINITRATO 10MG", "cod_bionexo": "249", "qty": 90}, {"material": "IVERMECTINA 6MG CP", "cod_bionexo": "270", "qty": 24}, {"material": "LEVOTIROXINA (T4) 100MCG CP", "cod_bionexo": "HRES 33", "qty": 90}, {"material": "LEVOTIROXINA (T4) 25MCG CP", "cod_bionexo": "298", "qty": 60}, {"material": "LOPERAMIDA 2MG CP", "cod_bionexo": "622", "qty": 60}, {"material": "LORATADINA 10MG COMP", "cod_bionexo": "23184", "qty": 80}, {"material": "METFORMINA 500MG COMP", "cod_bionexo": "8890", "qty": 90}, {"material": "METFORMINA 850MG CP", "cod_bionexo": "1411", "qty": 130}, {"material": "METILDOPA 250MG CP", "cod_bionexo": "253", "qty": 150}, {"material": "METOCLOPRAMIDA CLORIDRATO 10MG CP", "cod_bionexo": "202", "qty": 140}, {"material": "METOPROLOL TARTARATO 100MG CP", "cod_bionexo": "24643", "qty": 60}, {"material": "NIFEDIPINA 10MG CP", "cod_bionexo": "234", "qty": 30}, {"material": "NITROFURANTOINA 100MG CP", "cod_bionexo": "21348", "qty": 28}, {"material": "OMEPRAZOL 20MG CAP", "cod_bionexo": "204", "qty": 224}, {"material": "PARACETAMOL 750MG CP", "cod_bionexo": "HLR1398", "qty": 60}, {"material": "PREDNISONA 20MG CP", "cod_bionexo": "307", "qty": 60}, {"material": "PREDNISONA 5MG CP", "cod_bionexo": "21728", "qty": 40}, {"material": "PROMETAZINA CLORIDRATO 25MG CP", "cod_bionexo": "301", "qty": 80}, {"material": "PROPRANOLOL CLORIDRATO 40MG CP", "cod_bionexo": "257", "qty": 100}, {"material": "RIVAROXABANA 15 MG, CP", "cod_bionexo": "23949", "qty": 60}, {"material": "SIMETICONA 40MG COMP", "cod_bionexo": "HRES 108", "qty": 160}, {"material": "SULFAMETOXAZOL 400MG + TRIMETOPRIMA 80MG CP", "cod_bionexo": "12", "qty": 40}, {"material": "TIAMINA (VIT B1) 300MG CP", "cod_bionexo": "26159", "qty": 60}, {"material": "VARFARINA 5MG CP", "cod_bionexo": "20451", "qty": 60}, {"material": "VERAPAMIL CLORIDRATO 80MG CP", "cod_bionexo": "221", "qty": 90}, {"material": "VITAMINA COMPLEXO B DRG", "cod_bionexo": "154", "qty": 100}, {"material": "Apixabana 5 mg, cp", "cod_bionexo": "HLR342", "qty": 60}];
+
+  // Limpa TODOS os movimentos existentes
+  movimentos = [];
+
+  // Para cada item da planilha, cria um movimento de entrada com a quantidade correta
+  const hoje = '2026-04-14';
+  dadosPlanilha.forEach(item => {
+    // Busca produto pelo cod_bionexo (mais confiável)
+    let prod = products.find(p => p.cod_bionexo && 
+      p.cod_bionexo.toString().trim().toLowerCase() === item.cod_bionexo.toLowerCase());
+    // Fallback: busca pelo nome
+    if(!prod) {
+      prod = products.find(p => p.material && 
+        p.material.trim().toLowerCase() === item.material.toLowerCase());
+    }
+    if(!prod || !item.qty || item.qty <= 0) return;
+
+    movimentos.push({
+      id: Date.now() + Math.random(),
+      tipo: 'entrada',
+      prod_id: prod.id,
+      qtd: item.qty,
+      data: hoje,
+      resp: 'Carga Inicial — Planilha 14/04/2026',
+      obs: 'Saldo inicial importado da planilha de estoque',
+      saldo_apos: item.qty
+    });
+  });
+
+  _lastMovSaveTime = Date.now();
+  localStorage.setItem(PLANILHA_KEY, '1');
+  saveMainState(true);
+  console.log('Estoque carregado da planilha: ' + movimentos.length + ' itens.');
+}
+
 // ── LIMPEZA DE MOVIMENTOS DUPLICADOS ─────────────────────────────────────────
 // Remove entradas duplicadas geradas pela mesma NF (mesmo prod_id + mesmo número de NF).
 // Mantém apenas a primeira ocorrência de cada combinação prod_id+nfNumero.
@@ -3813,6 +3860,8 @@ function dedupMovimentos() {
   } catch(e) { /* usa dados em memória como fallback */ }
   // Remove duplicatas de NF que possam ter sido geradas por bug anterior
   dedupMovimentos();
+  // Carrega saldos corretos da planilha (executa apenas uma vez)
+  carregarEstoquePlanilha();
 
   try {
     // Garante que o admin master existe no banco
