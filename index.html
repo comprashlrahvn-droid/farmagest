@@ -2020,6 +2020,8 @@ function confEntr(id){
     const nfId=parseInt(id.replace('nf_',''));
     const nf=nfHistory.find(n=>n.id===nfId);
     if(nf){
+      // GUARD: NF já confirmada, não relança entradas no estoque
+      if(nf.status==='entregue') return;
       nf.status='entregue';
       let count=0;
       nf.itens?.forEach(it=>{
@@ -3005,6 +3007,11 @@ function registrarLoteValCurta(prodId, material, codBionexo, validade, lote, nfN
 // REGRA: itens SÓ entram no estoque após confirmação de entrega (nunca ao faturar).
 // Retorna array de alertas de validade curta detectados nesta entrega.
 function linkDeliveryToOrders(nfEntry){
+  // GUARD: se já existe qualquer movimento lançado por esta NF, não lança de novo (idempotente)
+  const nfTag = 'NF '+nfEntry.numero;
+  const jaExiste = movimentos.some(m => m.obs && m.obs.includes(nfTag));
+  if(jaExiste) return [];
+
   // Rastreia quais prod_ids ja receberam entrada nesta confirmacao para evitar duplicatas
   const jaLancado = new Set();
   const alertasValCurta = []; // lotes com validade curta detectados agora
@@ -3771,6 +3778,29 @@ async function initApp() {
   }
 }
 
+// ── LIMPEZA DE MOVIMENTOS DUPLICADOS ─────────────────────────────────────────
+// Remove entradas duplicadas geradas pela mesma NF (mesmo prod_id + mesmo número de NF).
+// Mantém apenas a primeira ocorrência de cada combinação prod_id+nfNumero.
+function dedupMovimentos() {
+  const seen = new Set();
+  const nfObsPattern = /Entrada automatica — NF (.+?) \(/;
+  const antes = movimentos.length;
+  movimentos = movimentos.filter(m => {
+    if(m.tipo !== 'entrada' || !m.obs) return true;
+    const match = m.obs.match(nfObsPattern);
+    if(!match) return true;
+    const key = m.prod_id + '|' + match[1];
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const removidos = antes - movimentos.length;
+  if(removidos > 0) {
+    console.warn('dedupMovimentos: removidos ' + removidos + ' lancamentos duplicados de NF.');
+    saveMainState(true);
+  }
+}
+
 // Initialize: load all persisted data, then check remembered login, or show login page
 (async()=>{
   showLoading('Iniciando sistema...');
@@ -3781,6 +3811,8 @@ async function initApp() {
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))
     ]);
   } catch(e) { /* usa dados em memória como fallback */ }
+  // Remove duplicatas de NF que possam ter sido geradas por bug anterior
+  dedupMovimentos();
 
   try {
     // Garante que o admin master existe no banco
