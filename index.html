@@ -3953,13 +3953,18 @@ function lerPlanilhaEstoque(file) {
   reader.readAsBinaryString(file);
 }
 
-function confirmarImportacaoPlanilha() {
+async function confirmarImportacaoPlanilha() {
   const itensValidos = _planilhaImportData.filter(i => i.prod && i.qty > 0);
   if (!itensValidos.length) return;
+
+  // Fecha o modal e mostra loading
+  closeModal('modal-importar-planilha');
+  showLoading('Salvando estoque no banco de dados...');
 
   const hoje = new Date().toISOString().split('T')[0];
   const resp = (currentUser && currentUser.name) ? currentUser.name : 'Importação Planilha';
 
+  // Adiciona cada item como movimentação de entrada
   itensValidos.forEach(item => {
     const saldoAtual = getEstoque(item.prod.id);
     movimentos.push({
@@ -3974,11 +3979,27 @@ function confirmarImportacaoPlanilha() {
     });
   });
 
-  saveMainState(true);
-  closeModal('modal-importar-planilha');
-  renderEstoque();
-  renderMovimentos();
-  toast(`✅ ${itensValidos.length} itens importados com sucesso! Saldos atualizados.`, 'success');
+  // Marca o timestamp ANTES de salvar para proteger da sincronização automática
+  _lastMovSaveTime = Date.now() + 300000; // 5 minutos de proteção
+
+  try {
+    // Salva diretamente no Google Sheets (aguarda confirmação)
+    await gsSaveArray('movimentos', movimentos);
+    hideLoading();
+    renderEstoque();
+    renderMovimentos();
+    updateCriticosBadge();
+    renderDashboard();
+    toast(`✅ ${itensValidos.length} itens importados e salvos com sucesso!`, 'success');
+  } catch(e) {
+    hideLoading();
+    // Mesmo com erro no GAS, tenta salvar via saveMainState
+    saveMainState(true);
+    renderEstoque();
+    renderMovimentos();
+    toast(`⚠️ ${itensValidos.length} itens importados. Verifique a conexão com o banco.`, 'warning');
+  }
+
   _planilhaImportData = [];
 }
 
