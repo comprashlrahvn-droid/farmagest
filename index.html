@@ -3473,15 +3473,21 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbyJkgbTKdjRRlbxibUYaLUAyz2dwXHiPDKJwsZNKkyEKEYnLndiixT0aHsZx2x6bwyt/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbzjgrwffArhBIni0wcfmD00uybbX6OyGX6VGRQMHq869GfKKGe30l_6XPpw3v0iKPyMPA/exec';
 const gsCache = {};
 
 async function gsGetAll(sheet, force=false) {
   if(!gsCache[sheet]||force) {
     try {
       const r = await fetch(`${GS_API}?action=getAll&sheet=${sheet}`);
-      gsCache[sheet] = await r.json();
-    } catch(e) { gsCache[sheet] = []; }
+      const resp = await r.json();
+      if(resp && resp.error) {
+        console.error('[GAS ERROR] getAll('+sheet+'):', resp.error);
+        gsCache[sheet] = [];
+      } else {
+        gsCache[sheet] = resp;
+      }
+    } catch(e) { console.error('[GAS FETCH ERROR] getAll('+sheet+'):', e); gsCache[sheet] = []; }
   }
   return gsCache[sheet]||[];
 }
@@ -3491,8 +3497,10 @@ async function gsInsert(sheet, data) {
       method: 'POST',
       body: JSON.stringify({ action: 'insert', sheet, data }),
     });
-    return await r.json();
-  } catch(e) { return null; }
+    const resp = await r.json();
+    if(resp && resp.error) console.error('[GAS ERROR] insert('+sheet+'):', resp.error);
+    return resp;
+  } catch(e) { console.error('[GAS FETCH ERROR] insert('+sheet+'):', e); return null; }
 }
 async function gsUpdate(sheet, id, data) {
   try {
@@ -3500,8 +3508,10 @@ async function gsUpdate(sheet, id, data) {
       method: 'POST',
       body: JSON.stringify({ action: 'update', sheet, id, data }),
     });
-    return await r.json();
-  } catch(e) { return null; }
+    const resp = await r.json();
+    if(resp && resp.error) console.error('[GAS ERROR] update('+sheet+','+id+'):', resp.error);
+    return resp;
+  } catch(e) { console.error('[GAS FETCH ERROR] update('+sheet+'):', e); return null; }
 }
 async function gsDelete(sheet, id) {
   try {
@@ -3509,8 +3519,10 @@ async function gsDelete(sheet, id) {
       method: 'POST',
       body: JSON.stringify({ action: 'delete', sheet, id }),
     });
-    return await r.json();
-  } catch(e) { return null; }
+    const resp = await r.json();
+    if(resp && resp.error) console.error('[GAS ERROR] delete('+sheet+','+id+'):', resp.error);
+    return resp;
+  } catch(e) { console.error('[GAS FETCH ERROR] delete('+sheet+'):', e); return null; }
 }
 
 // ── PERSISTÊNCIA DOS DADOS PRINCIPAIS NO GOOGLE SHEETS ────────────────────────
