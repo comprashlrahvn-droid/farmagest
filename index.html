@@ -3473,7 +3473,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbwbluGWd9pydWpcangk_CAm5c-VpQ_rMikjxYeh0rVab7DqwBiZa_fzTicy1zk_kZM9/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbyJkgbTKdjRRlbxibUYaLUAyz2dwXHiPDKJwsZNKkyEKEYnLndiixT0aHsZx2x6bwyt/exec';
 const gsCache = {};
 
 async function gsGetAll(sheet, force=false) {
@@ -3486,13 +3486,31 @@ async function gsGetAll(sheet, force=false) {
   return gsCache[sheet]||[];
 }
 async function gsInsert(sheet, data) {
-  try { const r=await fetch(`${GS_API}?action=insert&sheet=${sheet}&data=${encodeURIComponent(JSON.stringify(data))}`); return await r.json(); } catch(e){return null;}
+  try {
+    const r = await fetch(GS_API, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'insert', sheet, data }),
+    });
+    return await r.json();
+  } catch(e) { return null; }
 }
 async function gsUpdate(sheet, id, data) {
-  try { const r=await fetch(`${GS_API}?action=update&sheet=${sheet}&id=${id}&data=${encodeURIComponent(JSON.stringify(data))}`); return await r.json(); } catch(e){return null;}
+  try {
+    const r = await fetch(GS_API, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', sheet, id, data }),
+    });
+    return await r.json();
+  } catch(e) { return null; }
 }
 async function gsDelete(sheet, id) {
-  try { const r=await fetch(`${GS_API}?action=delete&sheet=${sheet}&id=${id}`); return await r.json(); } catch(e){return null;}
+  try {
+    const r = await fetch(GS_API, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', sheet, id }),
+    });
+    return await r.json();
+  } catch(e) { return null; }
 }
 
 // ── PERSISTÊNCIA DOS DADOS PRINCIPAIS NO GOOGLE SHEETS ────────────────────────
