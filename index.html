@@ -218,6 +218,38 @@ textarea.form-input{min-height:80px;resize:vertical;}
   </div>
 </div>
 
+<!-- MODAL IMPORTAR PLANILHA DE ESTOQUE -->
+<div class="modal-overlay" id="modal-importar-planilha">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h3>📥 Importar Saldo da Planilha</h3>
+      <button class="modal-close" onclick="closeModal('modal-importar-planilha')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:14px;font-size:0.83rem;">📋 Selecione a planilha Excel (.xlsx) com as colunas <b>MATERIAL</b>, <b>CÓD. BIONEXO</b> e <b>ESTOQUE ATUAL</b>.<br>Os saldos serão <b>somados</b> ao estoque existente como nova entrada de movimentação.</div>
+      <div class="upload-zone" id="planilha-drop-zone" onclick="document.getElementById('planilha-file-input').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handlePlanilhaDrop(event)">
+        <div class="upload-icon">📊</div>
+        <p><b>Clique ou arraste</b> o arquivo .xlsx aqui</p>
+        <p style="font-size:0.75rem;margin-top:4px;">Colunas esperadas: MATERIAL, CÓD. BIONEXO, ESTOQUE ATUAL</p>
+        <input type="file" id="planilha-file-input" accept=".xlsx,.xls" style="display:none" onchange="lerPlanilhaEstoque(this.files[0])">
+      </div>
+      <div id="planilha-preview" style="display:none;margin-top:14px;">
+        <div class="alert alert-success" id="planilha-summary" style="margin-bottom:10px;font-size:0.83rem;"></div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;">
+          <table style="width:100%;font-size:0.78rem;border-collapse:collapse;">
+            <thead><tr style="background:var(--surface3);"><th style="padding:7px 10px;text-align:left;color:var(--text3);">Material</th><th style="padding:7px 10px;text-align:left;color:var(--text3);">Cód.</th><th style="padding:7px 10px;text-align:center;color:var(--text3);">Qtd</th><th style="padding:7px 10px;text-align:center;color:var(--text3);">Status</th></tr></thead>
+            <tbody id="planilha-preview-body"></tbody>
+          </table>
+        </div>
+        <p id="planilha-nao-encontrados" style="font-size:0.75rem;color:var(--yellow);margin-top:8px;display:none;"></p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-importar-planilha')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirmar-importacao" style="display:none" onclick="confirmarImportacaoPlanilha()">✅ Confirmar Importação</button>
+    </div>
+  </div>
+</div>
 <!-- EDIT SUPPLIER MODAL -->
 <div class="modal-overlay" id="modal-edit-sup">
   <div class="modal" style="max-width:520px;">
@@ -709,6 +741,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
           <button class="btn btn-warning" onclick="openModalMovimento('saida')">− Saída</button>
           <button class="btn btn-secondary" onclick="exportarEstoquePDF()" title="Baixar lista completa em PDF">📄 PDF</button>
           <button class="btn btn-secondary" onclick="exportarEstoqueXLS()" title="Baixar lista completa em XLS">📊 XLS</button>
+          <button class="btn btn-blue" onclick="openModalImportarPlanilha()" title="Importar saldo da planilha Excel">📥 Importar Planilha</button>
         </div>
         <div class="table-wrap">
           <div class="table-header"><span class="table-header-title" id="estoque-count">—</span></div>
@@ -3829,6 +3862,126 @@ async function initApp() {
 
 
 // ── CARGA INICIAL DA PLANILHA (14/04/2026) ───────────────────────────────────
+
+// ── IMPORTAR PLANILHA DE ESTOQUE (upload pelo usuário) ───────────────────────
+let _planilhaImportData = []; // dados lidos prontos para confirmar
+
+function openModalImportarPlanilha() {
+  _planilhaImportData = [];
+  document.getElementById('planilha-file-input').value = '';
+  document.getElementById('planilha-preview').style.display = 'none';
+  document.getElementById('btn-confirmar-importacao').style.display = 'none';
+  document.getElementById('planilha-drop-zone').classList.remove('drag');
+  document.getElementById('modal-importar-planilha').classList.add('open');
+}
+
+function handlePlanilhaDrop(e) {
+  e.preventDefault();
+  document.getElementById('planilha-drop-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) lerPlanilhaEstoque(f);
+}
+
+function lerPlanilhaEstoque(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      
+      // Detecta colunas (aceita variações de maiúsculo/minúsculo)
+      const firstRow = rows[0] || {};
+      const keys = Object.keys(firstRow);
+      const colMaterial = keys.find(k => k.trim().toUpperCase().includes('MATERIAL')) || 'MATERIAL';
+      const colCod = keys.find(k => k.trim().toUpperCase().includes('BIONEXO') || k.trim().toUpperCase() === 'CÓD' || k.trim().toUpperCase().includes('COD')) || 'CÓD. BIONEXO';
+      const colQty = keys.find(k => k.trim().toUpperCase().includes('ESTOQUE ATUAL') || k.trim().toUpperCase().includes('ATUAL')) || 'ESTOQUE ATUAL';
+
+      _planilhaImportData = [];
+      const naoEncontrados = [];
+
+      rows.forEach(row => {
+        const material = (row[colMaterial]||'').toString().trim();
+        const codBionexo = (row[colCod]||'').toString().trim();
+        const qty = parseFloat(row[colQty]) || 0;
+        if (!material || qty <= 0) return;
+
+        // Tenta localizar produto: primeiro por código, depois por nome
+        let prod = products.find(p => p.cod_bionexo && p.cod_bionexo.toString().trim().toLowerCase() === codBionexo.toLowerCase());
+        if (!prod && material) {
+          prod = products.find(p => p.material && p.material.trim().toLowerCase() === material.toLowerCase());
+        }
+
+        _planilhaImportData.push({ material, codBionexo, qty, prod: prod || null });
+        if (!prod) naoEncontrados.push(material);
+      });
+
+      // Renderiza preview
+      const encontrados = _planilhaImportData.filter(i => i.prod);
+      const tbody = document.getElementById('planilha-preview-body');
+      tbody.innerHTML = _planilhaImportData.map(item => {
+        const statusHtml = item.prod
+          ? '<span class="badge badge-green">✅ Encontrado</span>'
+          : '<span class="badge badge-red">❌ Não localizado</span>';
+        return `<tr>
+          <td style="padding:6px 10px;color:var(--text)">${item.material}</td>
+          <td style="padding:6px 10px;color:var(--text3)">${item.codBionexo||'—'}</td>
+          <td style="padding:6px 10px;text-align:center;font-weight:700;color:var(--accent)">${item.qty}</td>
+          <td style="padding:6px 10px;text-align:center">${statusHtml}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('planilha-summary').innerHTML =
+        `📊 <b>${_planilhaImportData.length}</b> itens lidos — <b style="color:var(--green)">${encontrados.length}</b> serão importados` +
+        (naoEncontrados.length ? `, <b style="color:var(--yellow)">${naoEncontrados.length}</b> não localizados no cadastro` : '');
+
+      const naoEl = document.getElementById('planilha-nao-encontrados');
+      if (naoEncontrados.length) {
+        naoEl.style.display = 'block';
+        naoEl.textContent = '⚠️ Não localizados: ' + naoEncontrados.join(', ');
+      } else {
+        naoEl.style.display = 'none';
+      }
+
+      document.getElementById('planilha-preview').style.display = 'block';
+      document.getElementById('btn-confirmar-importacao').style.display = encontrados.length > 0 ? 'inline-flex' : 'none';
+    } catch(err) {
+      toast('❌ Erro ao ler a planilha: ' + err.message, 'error');
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function confirmarImportacaoPlanilha() {
+  const itensValidos = _planilhaImportData.filter(i => i.prod && i.qty > 0);
+  if (!itensValidos.length) return;
+
+  const hoje = new Date().toISOString().split('T')[0];
+  const resp = (currentUser && currentUser.name) ? currentUser.name : 'Importação Planilha';
+
+  itensValidos.forEach(item => {
+    const saldoAtual = getEstoque(item.prod.id);
+    movimentos.push({
+      id: Date.now() + Math.random(),
+      tipo: 'entrada',
+      prod_id: item.prod.id,
+      qtd: item.qty,
+      data: hoje,
+      resp: resp,
+      obs: `Entrada via importação de planilha (${hoje})`,
+      saldo_apos: saldoAtual + item.qty
+    });
+  });
+
+  saveMainState(true);
+  closeModal('modal-importar-planilha');
+  renderEstoque();
+  renderMovimentos();
+  toast(`✅ ${itensValidos.length} itens importados com sucesso! Saldos atualizados.`, 'success');
+  _planilhaImportData = [];
+}
+
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
   const PLANILHA_KEY = 'estoque_planilha_14042026_v1';
