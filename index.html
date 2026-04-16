@@ -479,7 +479,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
         </select>
         <button class="btn btn-secondary" onclick="clearAllQty()">🗑 Limpar Qtds</button>
         <button class="btn btn-warning" onclick="exportXLS()">⬇ XLS</button>
-        <button class="btn btn-blue" onclick="exportCSV()">⬇ CSV Bionexo</button>
+        
       </div>
       <div class="table-wrap">
         <div class="table-header">
@@ -550,13 +550,14 @@ textarea.form-input{min-height:80px;resize:vertical;}
             </div>
             <div class="form-group"><label class="form-label">Chave de Acesso</label><input class="form-input" id="nf-chave" readonly style="opacity:0.7;font-size:0.72rem"></div>
             <div class="form-group" style="margin-top:10px;padding:12px;background:rgba(46,204,113,0.07);border:1px solid rgba(46,204,113,0.3);border-radius:8px">
-              <label class="form-label" style="color:var(--accent)">🗂️ Vincular ao Pedido de Compra (opcional)</label>
+              <label class="form-label" style="color:var(--accent)">🗂️ Vincular a Pedido(s) de Compra (opcional)</label>
               <div style="position:relative">
                 <input class="form-input" id="nf-oc-search" placeholder="Digite o número ou fornecedor da OC..." oninput="searchOCParaNF('nf')" autocomplete="off" style="border-color:rgba(46,204,113,0.5)">
                 <input type="hidden" id="nf-oc-id">
                 <div id="nf-oc-sug" style="position:absolute;top:100%;left:0;right:0;z-index:400;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;display:none;"></div>
               </div>
-              <p style="font-size:0.72rem;color:var(--text3);margin-top:4px">ℹ️ Opcional — se vinculado, os itens da OC selecionada terão o status atualizado automaticamente.</p>
+              <div id="nf-oc-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:0"></div>
+              <p style="font-size:0.72rem;color:var(--text3);margin-top:4px">ℹ️ Opcional — vincule quantas OCs quiser. Os itens de cada OC terão o status atualizado automaticamente.</p>
             </div>
           </div>
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
@@ -601,7 +602,8 @@ textarea.form-input{min-height:80px;resize:vertical;}
                 <input type="hidden" id="mnf-oc-id">
                 <div id="mnf-oc-sug" style="position:absolute;top:100%;left:0;right:0;z-index:400;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;display:none;"></div>
               </div>
-              <p style="font-size:0.72rem;color:var(--text3);margin-top:4px">ℹ️ Opcional — se vinculado, os itens da OC selecionada terão o status atualizado automaticamente.</p>
+              <div id="mnf-oc-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:0"></div>
+              <p style="font-size:0.72rem;color:var(--text3);margin-top:4px">ℹ️ Opcional — vincule quantas OCs quiser. Os itens de cada OC selecionada terão o status atualizado automaticamente.</p>
             </div>
           </div>
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
@@ -1505,6 +1507,7 @@ function limparNFForm(){
   // Limpa vínculo OC
   const ocSearch=document.getElementById('nf-oc-search');if(ocSearch)ocSearch.value='';
   const ocId=document.getElementById('nf-oc-id');if(ocId)ocId.value='';
+  if(window._limparOCTags) _limparOCTags('nf');
   const ocSug=document.getElementById('nf-oc-sug');if(ocSug)ocSug.style.display='none';
 }
 
@@ -1559,13 +1562,48 @@ function searchOCParaNF(prefix){
   sugEl.style.display='block';
 }
 
+// Multi-OC state: map prefix -> array of {id, numero, fornecedor}
+const _nfOcSelecionadas = { nf: [], mnf: [] };
+
 function selecionarOCParaNF(prefix, ocId, ocNum, ocForn){
-  const searchEl=document.getElementById(prefix+'-oc-search');
-  const hiddenEl=document.getElementById(prefix+'-oc-id');
-  const sugEl=document.getElementById(prefix+'-oc-sug');
-  if(searchEl) searchEl.value=ocNum+' — '+ocForn;
-  if(hiddenEl) hiddenEl.value=ocId;
+  const sugEl = document.getElementById(prefix+'-oc-sug');
   if(sugEl) sugEl.style.display='none';
+  // Clear search input
+  const searchEl = document.getElementById(prefix+'-oc-search');
+  if(searchEl) searchEl.value='';
+  // Avoid duplicate
+  if(_nfOcSelecionadas[prefix].some(x=>x.id===ocId)) return;
+  _nfOcSelecionadas[prefix].push({id:ocId, numero:ocNum, fornecedor:ocForn});
+  // Update hidden field (comma-separated IDs for backwards compat)
+  const hiddenEl = document.getElementById(prefix+'-oc-id');
+  if(hiddenEl) hiddenEl.value = _nfOcSelecionadas[prefix].map(x=>x.id).join(',');
+  // Render chips
+  _renderOCTags(prefix);
+}
+
+function _removerOCTag(prefix, ocId){
+  _nfOcSelecionadas[prefix] = _nfOcSelecionadas[prefix].filter(x=>x.id!==ocId);
+  const hiddenEl = document.getElementById(prefix+'-oc-id');
+  if(hiddenEl) hiddenEl.value = _nfOcSelecionadas[prefix].map(x=>x.id).join(',');
+  _renderOCTags(prefix);
+}
+
+function _renderOCTags(prefix){
+  const tagsEl = document.getElementById(prefix+'-oc-tags');
+  if(!tagsEl) return;
+  tagsEl.innerHTML = _nfOcSelecionadas[prefix].map(oc=>
+    `<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.4);border-radius:20px;padding:3px 10px;font-size:0.75rem;color:var(--accent)">
+      🗂️ ${oc.numero} — ${(oc.fornecedor||'').substring(0,22)}
+      <button onclick="_removerOCTag('${prefix}','${oc.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.85rem;padding:0;line-height:1">✕</button>
+    </span>`
+  ).join('');
+}
+
+window._limparOCTags = function _limparOCTags(prefix){
+  _nfOcSelecionadas[prefix] = [];
+  const hiddenEl = document.getElementById(prefix+'-oc-id');
+  if(hiddenEl) hiddenEl.value = '';
+  _renderOCTags(prefix);
 }
 
 // ── DETECÇÃO DE NF DUPLICADA ─────────────────────────────────────────────────
@@ -1632,19 +1670,23 @@ function registrarNF(){
   if(!nfXMLData){alert('Nenhum XML carregado!');return;}
   const {numero,fornecedor,data,chave}=nfXMLData;
 
-  // Vínculo com OC é opcional
-  const ocId=document.getElementById('nf-oc-id')?.value?.trim()||'';
+  // Vínculo com OC(s) é opcional — suporta múltiplas OCs
+  const ocIdsRaw = document.getElementById('nf-oc-id')?.value?.trim()||'';
+  const ocIds = ocIdsRaw ? ocIdsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
 
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
   if(duplicatas.length){
-    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNF(numero,fornecedor,data,chave,ocId));
+    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNF(numero,fornecedor,data,chave,ocIds));
     return;
   }
-  _executarRegistroNF(numero,fornecedor,data,chave,ocId);
+  _executarRegistroNF(numero,fornecedor,data,chave,ocIds);
 }
 
-function _executarRegistroNF(numero,fornecedor,data,chave,ocId){
+function _executarRegistroNF(numero,fornecedor,data,chave,ocIds){
+  // ocIds may be array (multi-OC) or single string (legacy)
+  if(!Array.isArray(ocIds)) ocIds = ocIds ? [ocIds] : [];
+  const ocId = ocIds[0] || null; // primeiro ID para compatibilidade com nfEntry.oc_id
   // save vinculos + mark status
   nfItens.forEach(it=>{
     if(it.matched?.length>0){
@@ -1663,7 +1705,7 @@ function _executarRegistroNF(numero,fornecedor,data,chave,ocId){
       it.matched=[{...real}];
     }
   });
-  const nfEntry={id:Date.now(),numero,fornecedor,data,itens:JSON.parse(JSON.stringify(nfItens)),chave,status:'faturado',oc_id:ocId||null};
+  const nfEntry={id:Date.now(),numero,fornecedor,data,itens:JSON.parse(JSON.stringify(nfItens)),chave,status:'faturado',oc_id:ocId||null,oc_ids:ocIds};
   nfHistory.push(nfEntry);
   const marcados=nfItens.filter(i=>i.matched?.length>0).length;
 
@@ -1687,8 +1729,8 @@ function _executarRegistroNF(numero,fornecedor,data,chave,ocId){
     }).join('')}</div>
     ${marcados>0?`<div style="margin-top:10px;font-size:0.78rem;color:var(--yellow)">🟡 ${marcados} item(s) marcados como FATURADOS. Vínculos salvos para próximas importações.</div>`:''}
   </div>`;
-  // Vincula NF apenas à OC selecionada (atualiza status só nessa OC)
-  linkNFToSpecificOC(nfItens, ocId);
+  // Vincula NF a todas as OCs selecionadas
+  ocIds.forEach(id => linkNFToSpecificOC(nfItens, id));
   limparNFForm();
   renderDashboard();renderNFHistorico();renderOrders();renderRecebimento();renderEntregas();
   saveMainState();
@@ -3093,6 +3135,7 @@ function linkDeliveryToOrders(nfEntry){
   });
 
   updateOrdersBadge();
+  _lastMovSaveTime = Date.now(); // proteção: não sobrescrever movimentos recém-criados por NF
   renderEstoque();renderMovimentos();updateCriticosBadge();
   if(alertasValCurta.length) renderValidade();
   return alertasValCurta;
@@ -3140,6 +3183,7 @@ function limparNFManual(){
   // Limpa vínculo OC
   const mnfOcSearch=document.getElementById('mnf-oc-search');if(mnfOcSearch)mnfOcSearch.value='';
   const mnfOcId=document.getElementById('mnf-oc-id');if(mnfOcId)mnfOcId.value='';
+  if(window._limparOCTags) _limparOCTags('mnf');
   const mnfOcSug=document.getElementById('mnf-oc-sug');if(mnfOcSug)mnfOcSug.style.display='none';
   renderManualItens();
 }
@@ -3309,7 +3353,9 @@ function registrarNFManual(){
   if(!data){ alert('Informe a data de emissão.'); return; }
 
   // Vínculo com OC é opcional
-  const ocId=document.getElementById('mnf-oc-id')?.value?.trim()||'';
+  const _mnfOcIdsRaw=document.getElementById('mnf-oc-id')?.value?.trim()||'';
+  const ocId=_mnfOcIdsRaw.split(',')[0]?.trim()||'';
+  const _mnfOcIds = _mnfOcIdsRaw ? _mnfOcIdsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
 
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
@@ -3372,7 +3418,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId){
   </div>`;
 
   // Vincula NF apenas à OC selecionada
-  linkNFToSpecificOC(nfManualItens, ocId);
+  _mnfOcIds.forEach(id => linkNFToSpecificOC(nfManualItens, id));
 
   nfManualItens = [];
   renderManualItens();
@@ -3786,8 +3832,14 @@ async function initApp() {
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
   const PLANILHA_KEY = 'estoque_planilha_14042026_v1';
-  // Só executa uma vez por instalação
+  // Só executa uma vez — verifica tanto localStorage quanto movimentos já existentes
   if(localStorage.getItem(PLANILHA_KEY)) return;
+  // Se já existem movimentos de carga inicial no banco, não limpar novamente
+  const jaTemCargaInicial = movimentos.some(m => m.obs && m.obs.includes('Saldo inicial importado'));
+  if(jaTemCargaInicial) {
+    localStorage.setItem(PLANILHA_KEY, '1'); // sincroniza o flag local
+    return;
+  }
 
   const dadosPlanilha = [{"material": "ACIDO URSODESOXICOLICO 150 MG", "cod_bionexo": "HLR166", "qty": 60}, {"material": "AAS 100MG CP", "cod_bionexo": "43", "qty": 500}, {"material": "ACICLOVIR 200 CP", "cod_bionexo": "1", "qty": 60}, {"material": "ALBENDAZOL 400MG", "cod_bionexo": "1714", "qty": 10}, {"material": "ALOPURINOL 100MG CP", "cod_bionexo": "1540", "qty": 60}, {"material": "AMIODARONA CLORIDRATO 200MG CP", "cod_bionexo": "215", "qty": 100}, {"material": "AMOXICILINA 500MG + CLAVULANATO 125MG COMP", "cod_bionexo": "24536", "qty": 12}, {"material": "AMOXICILINA 500MG CAP", "cod_bionexo": "5", "qty": 42}, {"material": "ANLODIPINO BESILATO 5MG CP", "cod_bionexo": "1507", "qty": 90}, {"material": "ATENOLOL 50MG CP", "cod_bionexo": "1542", "qty": 120}, {"material": "AZITROMICINA 500MG CP", "cod_bionexo": "2093", "qty": 70}, {"material": "BISACODIL 5MG CP", "cod_bionexo": "258", "qty": 160}, {"material": "CAPTOPRIL 25MG CP", "cod_bionexo": "241", "qty": 630}, {"material": "CAPTOPRIL 50MG COMP", "cod_bionexo": "HLR330", "qty": 30}, {"material": "CARBONATO DE CALCIO 600MG", "cod_bionexo": "CARBONATODECALCIO", "qty": 120}, {"material": "CARVEDILOL 3,125MG CP", "cod_bionexo": "22057", "qty": 30}, {"material": "CARVEDILOL 6,25 CP", "cod_bionexo": "20823", "qty": 90}, {"material": "CETOPROFENO 50MG CAPS", "cod_bionexo": "CB11", "qty": 48}, {"material": "CILOSTAZOL 50MG CP", "cod_bionexo": "1573", "qty": 180}, {"material": "CLONIDINA CLORIDRATO 150MCG CP", "cod_bionexo": "293", "qty": 60}, {"material": "COLCHICINA 0,5MG COMP", "cod_bionexo": "HRES 28", "qty": 60}, {"material": "DEXAMETASONA 4MG CP", "cod_bionexo": "1715", "qty": 140}, {"material": "DICLOFENACO DE SODIO 50MG CP", "cod_bionexo": "272", "qty": 40}, {"material": "DIGOXINA 0,25MG CP", "cod_bionexo": "243", "qty": 40}, {"material": "DIPIRONA SODICA 500MG CP", "cod_bionexo": "48", "qty": 240}, {"material": "DOXASOZINA 2MG CP", "cod_bionexo": "249446", "qty": 60}, {"material": "ENALAPRIL MALEATO 10MG CP", "cod_bionexo": "246", "qty": 280}, {"material": "ENALAPRIL MALEATO 20MG CP", "cod_bionexo": "1623", "qty": 160}, {"material": "ESCOPOLAMINA (HIOSCINA) 10MG CP", "cod_bionexo": "138", "qty": 160}, {"material": "ESPIRONOLACTONA 25MG CP", "cod_bionexo": "295", "qty": 90}, {"material": "FLUCONAZOL 150MG CAP", "cod_bionexo": "1961", "qty": 92}, {"material": "FUROSEMIDA 40MG CP", "cod_bionexo": "299", "qty": 180}, {"material": "GLIBENCLAMIDA 5MG CP", "cod_bionexo": "620", "qty": 560}, {"material": "HIDRALAZINA 25MG COMP", "cod_bionexo": "21353", "qty": 100}, {"material": "HIDRALAZINA CLORIDRATO 50MG CP", "cod_bionexo": "533", "qty": 120}, {"material": "ISOSSORBIDA DINITRATO 10MG", "cod_bionexo": "249", "qty": 90}, {"material": "IVERMECTINA 6MG CP", "cod_bionexo": "270", "qty": 24}, {"material": "LEVOTIROXINA (T4) 100MCG CP", "cod_bionexo": "HRES 33", "qty": 90}, {"material": "LEVOTIROXINA (T4) 25MCG CP", "cod_bionexo": "298", "qty": 60}, {"material": "LOPERAMIDA 2MG CP", "cod_bionexo": "622", "qty": 60}, {"material": "LORATADINA 10MG COMP", "cod_bionexo": "23184", "qty": 80}, {"material": "METFORMINA 500MG COMP", "cod_bionexo": "8890", "qty": 90}, {"material": "METFORMINA 850MG CP", "cod_bionexo": "1411", "qty": 130}, {"material": "METILDOPA 250MG CP", "cod_bionexo": "253", "qty": 150}, {"material": "METOCLOPRAMIDA CLORIDRATO 10MG CP", "cod_bionexo": "202", "qty": 140}, {"material": "METOPROLOL TARTARATO 100MG CP", "cod_bionexo": "24643", "qty": 60}, {"material": "NIFEDIPINA 10MG CP", "cod_bionexo": "234", "qty": 30}, {"material": "NITROFURANTOINA 100MG CP", "cod_bionexo": "21348", "qty": 28}, {"material": "OMEPRAZOL 20MG CAP", "cod_bionexo": "204", "qty": 224}, {"material": "PARACETAMOL 750MG CP", "cod_bionexo": "HLR1398", "qty": 60}, {"material": "PREDNISONA 20MG CP", "cod_bionexo": "307", "qty": 60}, {"material": "PREDNISONA 5MG CP", "cod_bionexo": "21728", "qty": 40}, {"material": "PROMETAZINA CLORIDRATO 25MG CP", "cod_bionexo": "301", "qty": 80}, {"material": "PROPRANOLOL CLORIDRATO 40MG CP", "cod_bionexo": "257", "qty": 100}, {"material": "RIVAROXABANA 15 MG, CP", "cod_bionexo": "23949", "qty": 60}, {"material": "SIMETICONA 40MG COMP", "cod_bionexo": "HRES 108", "qty": 160}, {"material": "SULFAMETOXAZOL 400MG + TRIMETOPRIMA 80MG CP", "cod_bionexo": "12", "qty": 40}, {"material": "TIAMINA (VIT B1) 300MG CP", "cod_bionexo": "26159", "qty": 60}, {"material": "VARFARINA 5MG CP", "cod_bionexo": "20451", "qty": 60}, {"material": "VERAPAMIL CLORIDRATO 80MG CP", "cod_bionexo": "221", "qty": 90}, {"material": "VITAMINA COMPLEXO B DRG", "cod_bionexo": "154", "qty": 100}, {"material": "Apixabana 5 mg, cp", "cod_bionexo": "HLR342", "qty": 60}];
 
@@ -3819,7 +3871,7 @@ function carregarEstoquePlanilha() {
     });
   });
 
-  _lastMovSaveTime = Date.now();
+  _lastMovSaveTime = Date.now() + 240000; // proteção extra: 4min além do normal
   localStorage.setItem(PLANILHA_KEY, '1');
   saveMainState(true);
   console.log('Estoque carregado da planilha: ' + movimentos.length + ' itens.');
@@ -4555,22 +4607,32 @@ async function _penalizarFornecedorDivergencia(fornecedorNome, numProblemas){
 
 // ── NAVEGAÇÃO ROBUSTA PARA RECEBIMENTO ───────────────────────────────────────
 async function _enviarEmailDivergenciaFornecedor(nf, parts){
-  // Busca e-mail do fornecedor no cadastro (exato, depois parcial)
-  let emailFornecedor = '';
+  // Usa e-mail pré-encontrado pelo patch (se disponível) — evita busca dupla
+  let emailFornecedor = nf._emailFornecedor || '';
   let fornNome = '';
-  try {
-    if(!_fornecedores.length) await loadFornecedoresData();
-    const nomeNF = (nf.fornecedor||'').toLowerCase().trim();
-    // 1. Busca exata
-    let forn = _fornecedores.find(f=>(f.name||'').toLowerCase().trim()===nomeNF);
-    // 2. Busca parcial
-    if(!forn) forn = _fornecedores.find(f=>
-      nomeNF.includes((f.name||'').toLowerCase().trim()) ||
-      (f.name||'').toLowerCase().trim().includes(nomeNF)
-    );
-    emailFornecedor = forn?.email || '';
-    fornNome = forn?.name || nf.fornecedor || '';
-  } catch(e){}
+  if(!emailFornecedor){
+    try {
+      if(!_fornecedores.length) await loadFornecedoresData();
+      const nomeNF = (nf.fornecedor||'').toLowerCase().trim();
+      // 1. Busca exata
+      let forn = _fornecedores.find(f=>(f.name||'').toLowerCase().trim()===nomeNF);
+      // 2. Busca parcial
+      if(!forn) forn = _fornecedores.find(f=>
+        nomeNF.includes((f.name||'').toLowerCase().trim()) ||
+        (f.name||'').toLowerCase().trim().includes(nomeNF)
+      );
+      emailFornecedor = forn?.email || '';
+      fornNome = forn?.name || nf.fornecedor || '';
+    } catch(e){}
+  } else {
+    // Email já foi encontrado pelo patch — busca só o nome
+    try {
+      const nomeNF = (nf.fornecedor||'').toLowerCase().trim();
+      const forn = (_fornecedores||[]).find(f=>(f.name||'').toLowerCase().trim()===nomeNF) ||
+                   (_fornecedores||[]).find(f=>nomeNF.includes((f.name||'').toLowerCase().trim()));
+      fornNome = forn?.name || nf.fornecedor || '';
+    } catch(e){ fornNome = nf.fornecedor || ''; }
+  }
 
   if(!emailFornecedor){
     toast('⚠️ Fornecedor "' + (nf.fornecedor||'') + '" sem e-mail cadastrado. Divergência registrada, e-mail não enviado.', 'warning');
@@ -6182,6 +6244,64 @@ window.downloadPDFOC = async function(ocId) {
   }
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOWNLOAD XML DA OC
+// ─────────────────────────────────────────────────────────────────────────────
+window.downloadXMLOC = function(ocId) {
+  const oc = ocId ? window._ocList.find(x => x.id === ocId) : null;
+  if (!oc) { alert('OC não encontrada.'); return; }
+
+  const nomeForn = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, '').trim().substring(0, 40);
+  let ddmmaaaa = '';
+  try {
+    const d = oc.data ? new Date(oc.data + 'T12:00:00') : new Date();
+    ddmmaaaa = String(d.getDate()).padStart(2,'0') + String(d.getMonth()+1).padStart(2,'0') + d.getFullYear();
+  } catch(e) { ddmmaaaa = new Date().toLocaleDateString('pt-BR').replace(/\//g,''); }
+
+  const itensXML = (oc.itens || []).map((it, i) => `
+    <item numero="${i+1}">
+      <descricao>${_escXML(it.descricao || it.material || '')}</descricao>
+      <codigo_bionexo>${_escXML(it.cod_bionexo || '')}</codigo_bionexo>
+      <codigo_hlr>${_escXML(it.cod_hlr || '')}</codigo_hlr>
+      <quantidade>${it.qty_pedido || it.qty || 0}</quantidade>
+      <urgente>${it.urgente === 'S' ? 'SIM' : 'NAO'}</urgente>
+    </item>`).join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<OrdemDeCompra>
+  <numero>${_escXML(oc.numero)}</numero>
+  <fornecedor>${_escXML(oc.fornecedor || '')}</fornecedor>
+  <data>${oc.data || ''}</data>
+  <condicao_pagamento>${_escXML(oc.cond_pgto || '')}</condicao_pagamento>
+  <previsao_entrega>${oc.prev_entrega || ''}</previsao_entrega>
+  <status>${oc.status || ''}</status>
+  <total>${(oc.total || 0).toFixed(2)}</total>
+  <criado_por>${_escXML(oc.criado_por || '')}</criado_por>
+  <itens>${itensXML}
+  </itens>
+</OrdemDeCompra>`;
+
+  const blob = new Blob([xml], { type: 'application/xml;charset=UTF-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `OC ${nomeForn} ${ddmmaaaa}.xml`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+  if (window.toast) window.toast('⬇️ XML baixado: ' + a.download, 'success');
+};
+
+function _escXML(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&apos;');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. ENVIO AO FORNECEDOR
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6347,13 +6467,14 @@ window.renderOCPage = function() {
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-sm btn-secondary" onclick="editarOC('${oc.id}')">✏️ Editar</button>
         <button class="btn btn-sm btn-secondary" onclick="downloadPDFOC('${oc.id}')">⬇️ PDF</button>
+        <button class="btn btn-sm btn-secondary" onclick="downloadXMLOC('${oc.id}')">📄 XML</button>
         <button class="btn btn-sm btn-primary" onclick="enviarOCFornecedor('${oc.id}')">📤 Enviar</button>
         ${oc.status !== 'cancelada' ? `<button class="btn btn-sm btn-danger" onclick="cancelarOC('${oc.id}')">🚫 Cancelar</button>` : ''}
         <button class="btn btn-sm btn-danger" style="opacity:0.7" onclick="excluirOC('${oc.id}')">🗑️ Excluir</button>
       </div>
       ${(() => {
         // NFs vinculadas a esta OC
-        const nfsVinc = (window.nfHistory||[]).filter(n=>n.oc_id===oc.id);
+        const nfsVinc = (window.nfHistory||[]).filter(n=>n.oc_id===oc.id || (n.oc_ids||[]).includes(oc.id));
         if(!nfsVinc.length) return '';
         return `<div style="margin-top:10px;padding:8px 10px;background:rgba(46,204,113,0.06);border:1px solid rgba(46,204,113,0.2);border-radius:6px;font-size:0.78rem">
           <span style="color:var(--accent);font-weight:600">🧾 NFs vinculadas:</span>
@@ -6578,9 +6699,10 @@ window._enviarEmailDivergenciaFornecedor = async function(nf, parts) {
     return;
   }
 
-  // Chama a função original com o e-mail já encontrado
+  // Injeta o e-mail encontrado no objeto nf para que a função original não precise buscar de novo
+  const nfComEmail = { ...nf, _emailFornecedor: emailFornecedor };
   if (_origEnviarEmail) {
-    await _origEnviarEmail(nf, parts);
+    await _origEnviarEmail(nfComEmail, parts);
   }
 };
 
