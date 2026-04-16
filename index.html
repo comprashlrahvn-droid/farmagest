@@ -3520,35 +3520,36 @@ async function gsDelete(sheet, id) {
 
 // Salva um array inteiro como uma linha JSON em uma aba dedicada
 async function gsSaveArray(sheet, dataArray) {
+  // CORRIGIDO: delete+insert garantido em vez de update condicional
   try {
-    // Divide em chunks de 200 itens para não ultrapassar limite de URL (~8k chars)
-    // Primeiro apaga tudo da aba e recria (upsert completo)
     const chunkSize = 200;
-    // Usa uma linha especial com id=__data__ para guardar o JSON completo em partes
-    // Parte 1: limpa registros antigos dessa aba no cache
     gsCache[sheet] = null;
 
-    // Serializa em chunks e insere
     const chunks = [];
     for(let i = 0; i < dataArray.length; i += chunkSize) {
       chunks.push(dataArray.slice(i, i + chunkSize));
     }
+    if(chunks.length === 0) chunks.push([]);
 
-    // Tenta update do chunk 0 primeiro; se not_found, insere todos
-    const payload0 = { id: sheet+'_0', chunk: 0, total: chunks.length, json: JSON.stringify(chunks[0]||[]) };
-    const upd = await gsUpdate(sheet, sheet+'_0', payload0);
-    const isNew = !upd || upd.status === 'not_found' || upd.error;
-    if(isNew) await gsInsert(sheet, payload0);
-
-    // Demais chunks
-    for(let c = 1; c < chunks.length; c++) {
-      const payload = { id: sheet+'_'+c, chunk: c, total: chunks.length, json: JSON.stringify(chunks[c]) };
-      const u = await gsUpdate(sheet, sheet+'_'+c, payload);
-      if(!u || u.status === 'not_found' || u.error) await gsInsert(sheet, payload);
+    // Para cada chunk: tenta update; se falhar, garante insert
+    for(let c = 0; c < chunks.length; c++) {
+      const chunkId = sheet + '_' + c;
+      const payload = { id: chunkId, chunk: c, total: chunks.length, json: JSON.stringify(chunks[c]) };
+      const upd = await gsUpdate(sheet, chunkId, payload);
+      if(!upd || upd.status === 'not_found' || upd.error) {
+        // Deleta por precaução antes de inserir (evita duplicata)
+        await gsDelete(sheet, chunkId).catch(()=>{});
+        await gsInsert(sheet, payload);
+      }
     }
 
-    // Remove chunks excedentes de execuções anteriores com mais chunks
-    // (não crítico, apenas limpeza)
+    // Remove chunks excedentes de saves anteriores com mais chunks
+    for(let c = chunks.length; c < chunks.length + 15; c++) {
+      const chunkId = sheet + '_' + c;
+      const del = await gsDelete(sheet, chunkId);
+      if(!del || del.status === 'not_found') break;
+    }
+
     gsCache[sheet] = null;
   } catch(e) { console.warn('gsSaveArray error ('+sheet+'):', e); }
 }
@@ -3662,10 +3663,8 @@ async function loadMainState() {
       });
     }
 
-    // Só sobrescreve movimentos se NÃO há save local pendente E se não houve save recente (60s).
-    // Isso evita que a sincronização automática sobrescreva movimentos antes do GAS confirmar.
-    const _movRecentSave = (Date.now() - _lastMovSaveTime) < 60000;
-    if(Array.isArray(loadedMov) && loadedMov.length > 0 && !_savePending && !_movRecentSave) {
+    // GAS é a fonte autoritativa para movimentos — sempre carrega se disponível
+    if(Array.isArray(loadedMov) && loadedMov.length > 0) {
       movimentos = loadedMov.map(m => {
         if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
         if(m.saldo_apos !== undefined) m.saldo_apos = Number(m.saldo_apos)||0;
@@ -3998,7 +3997,7 @@ async function confirmarImportacaoPlanilha() {
   });
 
   // Marca o timestamp ANTES de salvar para proteger da sincronização automática
-  _lastMovSaveTime = Date.now() + 300000; // 5 minutos de proteção
+  // (proteção _lastMovSaveTime removida — o GAS agora é sempre autoritativo)
 
   try {
     // Salva diretamente no Google Sheets (aguarda confirmação)
@@ -4035,8 +4034,11 @@ function carregarEstoquePlanilha() {
 
   const dadosPlanilha = [{"material": "ACIDO URSODESOXICOLICO 150 MG", "cod_bionexo": "HLR166", "qty": 60}, {"material": "AAS 100MG CP", "cod_bionexo": "43", "qty": 500}, {"material": "ACICLOVIR 200 CP", "cod_bionexo": "1", "qty": 60}, {"material": "ALBENDAZOL 400MG", "cod_bionexo": "1714", "qty": 10}, {"material": "ALOPURINOL 100MG CP", "cod_bionexo": "1540", "qty": 60}, {"material": "AMIODARONA CLORIDRATO 200MG CP", "cod_bionexo": "215", "qty": 100}, {"material": "AMOXICILINA 500MG + CLAVULANATO 125MG COMP", "cod_bionexo": "24536", "qty": 12}, {"material": "AMOXICILINA 500MG CAP", "cod_bionexo": "5", "qty": 42}, {"material": "ANLODIPINO BESILATO 5MG CP", "cod_bionexo": "1507", "qty": 90}, {"material": "ATENOLOL 50MG CP", "cod_bionexo": "1542", "qty": 120}, {"material": "AZITROMICINA 500MG CP", "cod_bionexo": "2093", "qty": 70}, {"material": "BISACODIL 5MG CP", "cod_bionexo": "258", "qty": 160}, {"material": "CAPTOPRIL 25MG CP", "cod_bionexo": "241", "qty": 630}, {"material": "CAPTOPRIL 50MG COMP", "cod_bionexo": "HLR330", "qty": 30}, {"material": "CARBONATO DE CALCIO 600MG", "cod_bionexo": "CARBONATODECALCIO", "qty": 120}, {"material": "CARVEDILOL 3,125MG CP", "cod_bionexo": "22057", "qty": 30}, {"material": "CARVEDILOL 6,25 CP", "cod_bionexo": "20823", "qty": 90}, {"material": "CETOPROFENO 50MG CAPS", "cod_bionexo": "CB11", "qty": 48}, {"material": "CILOSTAZOL 50MG CP", "cod_bionexo": "1573", "qty": 180}, {"material": "CLONIDINA CLORIDRATO 150MCG CP", "cod_bionexo": "293", "qty": 60}, {"material": "COLCHICINA 0,5MG COMP", "cod_bionexo": "HRES 28", "qty": 60}, {"material": "DEXAMETASONA 4MG CP", "cod_bionexo": "1715", "qty": 140}, {"material": "DICLOFENACO DE SODIO 50MG CP", "cod_bionexo": "272", "qty": 40}, {"material": "DIGOXINA 0,25MG CP", "cod_bionexo": "243", "qty": 40}, {"material": "DIPIRONA SODICA 500MG CP", "cod_bionexo": "48", "qty": 240}, {"material": "DOXASOZINA 2MG CP", "cod_bionexo": "249446", "qty": 60}, {"material": "ENALAPRIL MALEATO 10MG CP", "cod_bionexo": "246", "qty": 280}, {"material": "ENALAPRIL MALEATO 20MG CP", "cod_bionexo": "1623", "qty": 160}, {"material": "ESCOPOLAMINA (HIOSCINA) 10MG CP", "cod_bionexo": "138", "qty": 160}, {"material": "ESPIRONOLACTONA 25MG CP", "cod_bionexo": "295", "qty": 90}, {"material": "FLUCONAZOL 150MG CAP", "cod_bionexo": "1961", "qty": 92}, {"material": "FUROSEMIDA 40MG CP", "cod_bionexo": "299", "qty": 180}, {"material": "GLIBENCLAMIDA 5MG CP", "cod_bionexo": "620", "qty": 560}, {"material": "HIDRALAZINA 25MG COMP", "cod_bionexo": "21353", "qty": 100}, {"material": "HIDRALAZINA CLORIDRATO 50MG CP", "cod_bionexo": "533", "qty": 120}, {"material": "ISOSSORBIDA DINITRATO 10MG", "cod_bionexo": "249", "qty": 90}, {"material": "IVERMECTINA 6MG CP", "cod_bionexo": "270", "qty": 24}, {"material": "LEVOTIROXINA (T4) 100MCG CP", "cod_bionexo": "HRES 33", "qty": 90}, {"material": "LEVOTIROXINA (T4) 25MCG CP", "cod_bionexo": "298", "qty": 60}, {"material": "LOPERAMIDA 2MG CP", "cod_bionexo": "622", "qty": 60}, {"material": "LORATADINA 10MG COMP", "cod_bionexo": "23184", "qty": 80}, {"material": "METFORMINA 500MG COMP", "cod_bionexo": "8890", "qty": 90}, {"material": "METFORMINA 850MG CP", "cod_bionexo": "1411", "qty": 130}, {"material": "METILDOPA 250MG CP", "cod_bionexo": "253", "qty": 150}, {"material": "METOCLOPRAMIDA CLORIDRATO 10MG CP", "cod_bionexo": "202", "qty": 140}, {"material": "METOPROLOL TARTARATO 100MG CP", "cod_bionexo": "24643", "qty": 60}, {"material": "NIFEDIPINA 10MG CP", "cod_bionexo": "234", "qty": 30}, {"material": "NITROFURANTOINA 100MG CP", "cod_bionexo": "21348", "qty": 28}, {"material": "OMEPRAZOL 20MG CAP", "cod_bionexo": "204", "qty": 224}, {"material": "PARACETAMOL 750MG CP", "cod_bionexo": "HLR1398", "qty": 60}, {"material": "PREDNISONA 20MG CP", "cod_bionexo": "307", "qty": 60}, {"material": "PREDNISONA 5MG CP", "cod_bionexo": "21728", "qty": 40}, {"material": "PROMETAZINA CLORIDRATO 25MG CP", "cod_bionexo": "301", "qty": 80}, {"material": "PROPRANOLOL CLORIDRATO 40MG CP", "cod_bionexo": "257", "qty": 100}, {"material": "RIVAROXABANA 15 MG, CP", "cod_bionexo": "23949", "qty": 60}, {"material": "SIMETICONA 40MG COMP", "cod_bionexo": "HRES 108", "qty": 160}, {"material": "SULFAMETOXAZOL 400MG + TRIMETOPRIMA 80MG CP", "cod_bionexo": "12", "qty": 40}, {"material": "TIAMINA (VIT B1) 300MG CP", "cod_bionexo": "26159", "qty": 60}, {"material": "VARFARINA 5MG CP", "cod_bionexo": "20451", "qty": 60}, {"material": "VERAPAMIL CLORIDRATO 80MG CP", "cod_bionexo": "221", "qty": 90}, {"material": "VITAMINA COMPLEXO B DRG", "cod_bionexo": "154", "qty": 100}, {"material": "Apixabana 5 mg, cp", "cod_bionexo": "HLR342", "qty": 60}];
 
-  // Limpa TODOS os movimentos existentes
-  movimentos = [];
+  // CORRIGIDO: só cria carga inicial se movimentos realmente estiverem vazios após load do GAS
+  if(movimentos.length > 0) {
+    localStorage.setItem(PLANILHA_KEY, '1');
+    return;
+  }
 
   // Para cada item da planilha, cria um movimento de entrada com a quantidade correta
   const hoje = '2026-04-14';
@@ -4063,7 +4065,7 @@ function carregarEstoquePlanilha() {
     });
   });
 
-  _lastMovSaveTime = Date.now() + 240000; // proteção extra: 4min além do normal
+  // (proteção _lastMovSaveTime removida — desnecessária com nova estratégia de save)
   localStorage.setItem(PLANILHA_KEY, '1');
   saveMainState(true);
   console.log('Estoque carregado da planilha: ' + movimentos.length + ' itens.');
