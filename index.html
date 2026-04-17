@@ -2917,7 +2917,10 @@ function renderOrders(){
       <td>${nfAlert}</td>
       <td>${entAlert}</td>
       <td>${statusMap[o.status]||'—'}</td>
-      <td><button class="btn btn-sm btn-secondary" onclick="viewOrderDetail(${o.id})">🔎 Ver</button></td>
+      <td style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm btn-secondary" onclick="viewOrderDetail(${o.id})">🔎 Ver</button>
+        <button class="btn btn-sm" style="background:rgba(0,180,100,0.15);color:#00c878;border:1px solid rgba(0,200,120,0.3)" onclick="downloadOrderXLS(${o.id})" title="Baixar planilha XLS">⬇️ XLS</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -2950,6 +2953,50 @@ function viewOrderDetail(id){
       </tbody></table>
     </div>`;
   document.getElementById('modal-order-detail').classList.add('open');
+}
+
+function downloadOrderXLS(id) {
+  const o = purchaseOrders.find(x => x.id === id);
+  if (!o) return;
+  o.status = calcOrderStatus(o);
+
+  const statusLabel = { pendente: 'Pendente', faturado: 'Faturado', entregue: 'Entregue', aberto: 'Em aberto', parcial: 'Parcial', suspensa: 'Suspensa' };
+
+  // Aba 1 — Cabeçalho da ordem
+  const infoRows = [
+    ['PEDIDO DE COMPRA — ASSOCIAÇÃO HOSPITALAR VILA NOVA'],
+    [],
+    ['Nº Ordem:', o.numero],
+    ['Data:', o.data],
+    ['Status:', statusLabel[o.status] || o.status],
+    ['Total de Itens:', o.itens?.length || 0],
+    ['Faturados:', o.itens?.filter(i => i.status === 'faturado' || i.status === 'entregue').length || 0],
+    ['Entregues:', o.itens?.filter(i => i.status === 'entregue').length || 0],
+    [],
+    ['MATERIAL', 'CÓD. BIONEXO', 'CÓD. HLR', 'QTD PEDIDA', 'QTD FATURADA', 'QTD ENTREGUE', 'URGENTE', 'STATUS'],
+    ...(o.itens || []).map(i => [
+      i.material || '',
+      i.cod_bionexo || '',
+      i.cod_hlr || '',
+      i.qty_pedido || 0,
+      i.qty_faturada || 0,
+      i.qty_entregue || 0,
+      i.urgente === 'S' ? 'SIM' : '',
+      statusLabel[i.status] || i.status || ''
+    ])
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(infoRows);
+
+  // Largura das colunas
+  ws['!cols'] = [
+    { wch: 45 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
+    { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 }
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, o.numero);
+  XLSX.writeFile(wb, `${o.numero}_${o.data}.xlsx`);
 }
 
 // Link NF faturamento to purchase orders
@@ -3813,19 +3860,8 @@ async function doRegister() {
       gsGetAll('usuarios',true),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000))
     ]);
-    if(Array.isArray(users)) {
-      const existing = users.find(x => String(x.email||'').trim().toLowerCase() === email.toLowerCase());
-      if(existing) {
-        hideLoading();
-        const st = String(existing.status||'').trim().toLowerCase();
-        if(st === 'approved') {
-          errEl.textContent = '⚠️ E-mail já cadastrado e aprovado. Verifique sua senha ou contate o administrador.';
-        } else {
-          errEl.textContent = '⏳ Cadastro já existe mas aguarda aprovação do administrador. Não é necessário se cadastrar novamente.';
-        }
-        errEl.style.display='block';
-        return;
-      }
+    if(Array.isArray(users) && users.find(x=>x.email===email)){
+      hideLoading();errEl.textContent='E-mail já cadastrado.';errEl.style.display='block';return;
     }
   } catch(e) { /* continua mesmo sem verificar duplicatas */ }
   const newUser = {id:'u_'+Date.now(),name,email,password:pass,role,status:'pending',isCreator:'false'};
@@ -4674,7 +4710,6 @@ async function renderUsuarios() {
     <td style="display:flex;gap:6px;flex-wrap:wrap">
       ${u.email!==MASTER_EMAIL&&u.status!=='approved'?`<button class="btn btn-sm btn-primary" onclick="aprovarUsuario('${u.id}')">✅ Aprovar</button>`:''}
       ${u.email!==MASTER_EMAIL&&u.status==='approved'?`<button class="btn btn-sm btn-warning" onclick="revogarUsuario('${u.id}')">🔒 Revogar</button>`:''}
-      ${u.email!==MASTER_EMAIL?`<button class="btn btn-sm" style="background:var(--surface3);color:var(--text)" onclick="resetSenhaUsuario('${u.id}','${(u.name||'').replace(/'/g,'')}')" title="Redefinir senha e aprovar acesso">🔑 Redefinir</button>`:''}
       ${u.email!==MASTER_EMAIL?`<button class="btn btn-sm btn-danger" onclick="excluirUsuario('${u.id}')">🗑</button>`:'<span class="badge badge-gray">Protegido</span>'}
     </td>
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum usuário.</td></tr>';
@@ -4707,21 +4742,6 @@ async function excluirUsuario(id){
   gsCache['usuarios'] = null;
   hideLoading();
   toast('🗑 Usuário excluído.', 'success');
-  renderUsuarios();
-}
-
-async function resetSenhaUsuario(id, nome) {
-  const novaSenha = prompt('Nova senha para ' + nome + ' (mín. 6 caracteres):', '');
-  if(!novaSenha || novaSenha.length < 6) { alert('Senha inválida ou cancelado.'); return; }
-  showLoading('Redefinindo senha...');
-  const res = await gsUpdate('usuarios', id, { password: novaSenha, status: 'approved' });
-  gsCache['usuarios'] = null;
-  hideLoading();
-  if(res && res.status === 'updated') {
-    toast('✅ Senha redefinida e acesso aprovado para ' + nome + '.', 'success');
-  } else {
-    toast('⚠️ Erro ao redefinir senha. Tente novamente.', 'error');
-  }
   renderUsuarios();
 }
 
