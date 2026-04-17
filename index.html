@@ -3480,14 +3480,8 @@ async function gsGetAll(sheet, force=false) {
   if(!gsCache[sheet]||force) {
     try {
       const r = await fetch(`${GS_API}?action=getAll&sheet=${sheet}`);
-      const resp = await r.json();
-      if(resp && resp.error) {
-        console.error('[GAS ERROR] getAll('+sheet+'):', resp.error);
-        gsCache[sheet] = [];
-      } else {
-        gsCache[sheet] = resp;
-      }
-    } catch(e) { console.error('[GAS FETCH ERROR] getAll('+sheet+'):', e); gsCache[sheet] = []; }
+      gsCache[sheet] = await r.json();
+    } catch(e) { gsCache[sheet] = []; }
   }
   return gsCache[sheet]||[];
 }
@@ -3497,10 +3491,8 @@ async function gsInsert(sheet, data) {
       method: 'POST',
       body: JSON.stringify({ action: 'insert', sheet, data }),
     });
-    const resp = await r.json();
-    if(resp && resp.error) console.error('[GAS ERROR] insert('+sheet+'):', resp.error);
-    return resp;
-  } catch(e) { console.error('[GAS FETCH ERROR] insert('+sheet+'):', e); return null; }
+    return await r.json();
+  } catch(e) { return null; }
 }
 async function gsUpdate(sheet, id, data) {
   try {
@@ -3508,10 +3500,8 @@ async function gsUpdate(sheet, id, data) {
       method: 'POST',
       body: JSON.stringify({ action: 'update', sheet, id, data }),
     });
-    const resp = await r.json();
-    if(resp && resp.error) console.error('[GAS ERROR] update('+sheet+','+id+'):', resp.error);
-    return resp;
-  } catch(e) { console.error('[GAS FETCH ERROR] update('+sheet+'):', e); return null; }
+    return await r.json();
+  } catch(e) { return null; }
 }
 async function gsDelete(sheet, id) {
   try {
@@ -3519,10 +3509,8 @@ async function gsDelete(sheet, id) {
       method: 'POST',
       body: JSON.stringify({ action: 'delete', sheet, id }),
     });
-    const resp = await r.json();
-    if(resp && resp.error) console.error('[GAS ERROR] delete('+sheet+','+id+'):', resp.error);
-    return resp;
-  } catch(e) { console.error('[GAS FETCH ERROR] delete('+sheet+'):', e); return null; }
+    return await r.json();
+  } catch(e) { return null; }
 }
 
 // ── PERSISTÊNCIA DOS DADOS PRINCIPAIS NO GOOGLE SHEETS ────────────────────────
@@ -3825,8 +3813,19 @@ async function doRegister() {
       gsGetAll('usuarios',true),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000))
     ]);
-    if(Array.isArray(users) && users.find(x=>x.email===email)){
-      hideLoading();errEl.textContent='E-mail já cadastrado.';errEl.style.display='block';return;
+    if(Array.isArray(users)) {
+      const existing = users.find(x => String(x.email||'').trim().toLowerCase() === email.toLowerCase());
+      if(existing) {
+        hideLoading();
+        const st = String(existing.status||'').trim().toLowerCase();
+        if(st === 'approved') {
+          errEl.textContent = '⚠️ E-mail já cadastrado e aprovado. Verifique sua senha ou contate o administrador.';
+        } else {
+          errEl.textContent = '⏳ Cadastro já existe mas aguarda aprovação do administrador. Não é necessário se cadastrar novamente.';
+        }
+        errEl.style.display='block';
+        return;
+      }
     }
   } catch(e) { /* continua mesmo sem verificar duplicatas */ }
   const newUser = {id:'u_'+Date.now(),name,email,password:pass,role,status:'pending',isCreator:'false'};
@@ -4675,6 +4674,7 @@ async function renderUsuarios() {
     <td style="display:flex;gap:6px;flex-wrap:wrap">
       ${u.email!==MASTER_EMAIL&&u.status!=='approved'?`<button class="btn btn-sm btn-primary" onclick="aprovarUsuario('${u.id}')">✅ Aprovar</button>`:''}
       ${u.email!==MASTER_EMAIL&&u.status==='approved'?`<button class="btn btn-sm btn-warning" onclick="revogarUsuario('${u.id}')">🔒 Revogar</button>`:''}
+      ${u.email!==MASTER_EMAIL?`<button class="btn btn-sm" style="background:var(--surface3);color:var(--text)" onclick="resetSenhaUsuario('${u.id}','${(u.name||'').replace(/'/g,'')}')" title="Redefinir senha e aprovar acesso">🔑 Redefinir</button>`:''}
       ${u.email!==MASTER_EMAIL?`<button class="btn btn-sm btn-danger" onclick="excluirUsuario('${u.id}')">🗑</button>`:'<span class="badge badge-gray">Protegido</span>'}
     </td>
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum usuário.</td></tr>';
@@ -4707,6 +4707,21 @@ async function excluirUsuario(id){
   gsCache['usuarios'] = null;
   hideLoading();
   toast('🗑 Usuário excluído.', 'success');
+  renderUsuarios();
+}
+
+async function resetSenhaUsuario(id, nome) {
+  const novaSenha = prompt('Nova senha para ' + nome + ' (mín. 6 caracteres):', '');
+  if(!novaSenha || novaSenha.length < 6) { alert('Senha inválida ou cancelado.'); return; }
+  showLoading('Redefinindo senha...');
+  const res = await gsUpdate('usuarios', id, { password: novaSenha, status: 'approved' });
+  gsCache['usuarios'] = null;
+  hideLoading();
+  if(res && res.status === 'updated') {
+    toast('✅ Senha redefinida e acesso aprovado para ' + nome + '.', 'success');
+  } else {
+    toast('⚠️ Erro ao redefinir senha. Tente novamente.', 'error');
+  }
   renderUsuarios();
 }
 
