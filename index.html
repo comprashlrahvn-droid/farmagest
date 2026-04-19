@@ -1314,6 +1314,9 @@ function saveProd(){
 }
 
 async function _salvarProdutos(msgSucesso){
+  // 1. Salva imediatamente em localStorage (confiável, síncrono)
+  try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
+
   window._produtosSendoSalvos = true;
   showLoading('Salvando produto no banco de dados...');
   try {
@@ -1322,8 +1325,9 @@ async function _salvarProdutos(msgSucesso){
     if(msgSucesso) toast(msgSucesso, 'success');
   } catch(e){
     hideLoading();
-    toast('⚠️ Erro ao salvar. Tente novamente.','error');
-    console.warn('Erro ao salvar produtos:', e);
+    // GAS falhou mas localStorage já foi salvo — dados não se perdem
+    toast('⚠️ Salvo localmente. Sincronização com servidor pendente.','warning');
+    console.warn('Erro ao salvar produtos no GAS:', e);
   }
   window._produtosSendoSalvos = false;
 }
@@ -3764,9 +3768,21 @@ async function loadMainState() {
       PRODUCTS_RAW.forEach(p => { baseById[p.id] = {...p}; });
       // Lista final = todos os produtos do GS (inclui novos de qualquer usuário)
       products = loadedProducts.map(p => baseById[p.id] ? {...baseById[p.id], ...p} : {...p});
+      // Atualiza backup local com dados do GS
+      try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
     } else {
-      // GS vazio (primeira vez) — usa catálogo base como ponto de partida
-      products = JSON.parse(JSON.stringify(PRODUCTS_RAW));
+      // GS vazio ou falhou — tenta backup do localStorage antes de usar catálogo base
+      let localBackup = null;
+      try { localBackup = JSON.parse(localStorage.getItem('fg_products_backup') || 'null'); } catch(e){}
+      if(Array.isArray(localBackup) && localBackup.length > 0) {
+        console.warn('loadMainState: GS retornou vazio para products — usando backup localStorage');
+        products = localBackup;
+        // Tenta resincronizar com GAS em background
+        setTimeout(() => gsSaveArray('products', products).catch(()=>{}), 3000);
+      } else {
+        // Nenhuma fonte disponível — usa catálogo base
+        products = JSON.parse(JSON.stringify(PRODUCTS_RAW));
+      }
     }
 
     if(Array.isArray(loadedNF) && loadedNF.length > 0) {
@@ -3966,6 +3982,13 @@ function showApp() {
     document.getElementById('sf-username').textContent=`${currentUser.name} (${currentUser.role==='admin'?'Admin':'Usuário'})`;
     if(sd) sd.style.display='none';
   }
+  // Carrega backup local imediatamente (antes da sincronização com GAS)
+  try {
+    const localBackup = JSON.parse(localStorage.getItem('fg_products_backup') || 'null');
+    if(Array.isArray(localBackup) && localBackup.length > PRODUCTS_RAW.length) {
+      products = localBackup;
+    }
+  } catch(e){}
   // Re-render dashboard e badges com dados já carregados
   renderDashboard();
   renderPedidos();
