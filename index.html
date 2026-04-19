@@ -1219,36 +1219,35 @@ function exportCSV(){
 function importarPedidoXLS(event){
   const file=event.target.files[0];
   if(!file)return;
-  event.target.value=''; // reset input para permitir reimportar mesmo arquivo
+  event.target.value='';
   const reader=new FileReader();
   reader.onload=function(e){
     try{
       const wb=XLSX.read(e.target.result,{type:'binary'});
       const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      // Lê como array de arrays — coluna A = índice 0, coluna B = índice 1
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       if(!rows.length){alert('Planilha vazia ou sem dados.');return;}
 
-      // Detecta colunas — aceita variações de nome
-      const keys=Object.keys(rows[0]||{});
-      const colCod=keys.find(k=>{const u=k.trim().toUpperCase();return u.includes('BIONEXO')||u==='COD'||u==='CÓDIGO'||u==='CODIGO'||u==='CÓD';})
-        ||keys[0];
-      const colQty=keys.find(k=>{const u=k.trim().toUpperCase();return u.includes('QTD')||u.includes('QUANT')||u==='QUANTIDADE';})
-        ||keys[1];
-
-      let encontrados=0,naoEncontrados=[];
-      rows.forEach(row=>{
-        const cod=String(row[colCod]||'').trim();
-        const qty=parseFloat(row[colQty])||0;
-        if(!cod||qty<=0)return;
-        const prod=products.find(p=>p.cod_bionexo&&String(p.cod_bionexo).trim().toLowerCase()===cod.toLowerCase());
+      let encontrados=0,naoEncontrados=[],ignoradas=0;
+      rows.forEach(function(row,idx){
+        const cod=String(row[0]||'').trim();
+        const qty=parseFloat(String(row[1]||'').replace(',','.'));
+        // Pula linhas vazias ou cabeçalho (se 1ª linha for texto)
+        if(!cod){ignoradas++;return;}
+        if(isNaN(qty)||qty<=0){
+          // pode ser linha de cabeçalho — ignora silenciosamente
+          ignoradas++;return;
+        }
+        const prod=products.find(p=>p.cod_bionexo&&String(p.cod_bionexo).trim()===cod);
         if(prod){prod.pedido=qty;encontrados++;}
         else naoEncontrados.push(cod);
       });
 
       updateBadges();renderPedidos();saveMainState();
 
-      let msg=`✅ ${encontrados} item(s) importado(s) com sucesso.`;
-      if(naoEncontrados.length) msg+=`\n\n⚠️ ${naoEncontrados.length} código(s) não encontrado(s) no cadastro:\n${naoEncontrados.slice(0,10).join(', ')}${naoEncontrados.length>10?'...':''}`;
+      let msg='✅ '+encontrados+' item(s) importado(s) com sucesso.';
+      if(naoEncontrados.length) msg+='\n\n⚠️ '+naoEncontrados.length+' código(s) não encontrado(s) no cadastro:\n'+naoEncontrados.slice(0,15).join(', ')+(naoEncontrados.length>15?'...':'');
       alert(msg);
     }catch(err){alert('Erro ao ler a planilha: '+err.message);}
   };
