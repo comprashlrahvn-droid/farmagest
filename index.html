@@ -511,7 +511,8 @@ textarea.form-input{min-height:80px;resize:vertical;}
         </select>
         <button class="btn btn-secondary" onclick="clearAllQty()">🗑 Limpar Qtds</button>
         <button class="btn btn-warning" onclick="exportXLS()">⬇ XLS</button>
-        
+        <button class="btn btn-secondary" onclick="document.getElementById('import-pedido-xls').click()">📥 Importar XLS</button>
+        <input type="file" id="import-pedido-xls" accept=".xlsx,.xls" style="display:none" onchange="importarPedidoXLS(event)">
       </div>
       <div class="table-wrap">
         <div class="table-header">
@@ -1214,6 +1215,46 @@ function exportCSV(){
   XLSX.writeFile(wb,`Bionexo_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
 }
 
+// ── IMPORTAR PEDIDO XLS (cód. bionexo + quantidade) ─────────────────────────
+function importarPedidoXLS(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value=''; // reset input para permitir reimportar mesmo arquivo
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      if(!rows.length){alert('Planilha vazia ou sem dados.');return;}
+
+      // Detecta colunas — aceita variações de nome
+      const keys=Object.keys(rows[0]||{});
+      const colCod=keys.find(k=>{const u=k.trim().toUpperCase();return u.includes('BIONEXO')||u==='COD'||u==='CÓDIGO'||u==='CODIGO'||u==='CÓD';})
+        ||keys[0];
+      const colQty=keys.find(k=>{const u=k.trim().toUpperCase();return u.includes('QTD')||u.includes('QUANT')||u==='QUANTIDADE';})
+        ||keys[1];
+
+      let encontrados=0,naoEncontrados=[];
+      rows.forEach(row=>{
+        const cod=String(row[colCod]||'').trim();
+        const qty=parseFloat(row[colQty])||0;
+        if(!cod||qty<=0)return;
+        const prod=products.find(p=>p.cod_bionexo&&String(p.cod_bionexo).trim().toLowerCase()===cod.toLowerCase());
+        if(prod){prod.pedido=qty;encontrados++;}
+        else naoEncontrados.push(cod);
+      });
+
+      updateBadges();renderPedidos();saveMainState();
+
+      let msg=`✅ ${encontrados} item(s) importado(s) com sucesso.`;
+      if(naoEncontrados.length) msg+=`\n\n⚠️ ${naoEncontrados.length} código(s) não encontrado(s) no cadastro:\n${naoEncontrados.slice(0,10).join(', ')}${naoEncontrados.length>10?'...':''}`;
+      alert(msg);
+    }catch(err){alert('Erro ao ler a planilha: '+err.message);}
+  };
+  reader.readAsBinaryString(file);
+}
+
 // PRODUTOS
 function renderProdutos(){
   const q=(document.getElementById('search-prod')||{}).value?.toLowerCase()||'';
@@ -1230,7 +1271,7 @@ function renderProdutos(){
     const vc=isVC(p);
     const mp=p.marcas_pad&&p.marcas_pad!=='nan'?p.marcas_pad.split(',').map(m=>`<span class="chip chip-green">✅ ${m.trim()}</span>`).join(' '):'<span style="color:var(--text3)">—</span>';
     const md=p.marcas_desq&&p.marcas_desq!=='nan'?p.marcas_desq.split(',').map(m=>`<span class="chip chip-red">🚫 ${m.trim()}</span>`).join(' '):'<span style="color:var(--text3)">—</span>';
-    return`<tr><td class="dim">${p.cod_bionexo||'—'}</td><td class="dim">${p.cod_hlr||'—'}</td><td><b>${p.material}</b></td><td>${mp}</td><td>${md}</td><td>${p.validade?`<span class="badge ${vc?'badge-red':'badge-green'}">${p.validade}${vc?' ⚠️':''}</span>`:'—'}</td><td><button class="btn btn-sm btn-secondary" onclick="openModalProd(${p.id})">✏️ Editar</button></td></tr>`;
+    return`<tr><td class="dim">${p.cod_bionexo||'—'}</td><td class="dim">${p.cod_hlr||'—'}</td><td><b>${p.material}</b></td><td>${mp}</td><td>${md}</td><td>${p.validade?`<span class="badge ${vc?'badge-red':'badge-green'}">${p.validade}${vc?' ⚠️':''}</span>`:'—'}</td><td style="display:flex;gap:5px"><button class="btn btn-sm btn-secondary" onclick="openModalProd(${p.id})">✏️ Editar</button><button class="btn btn-sm btn-danger" onclick="deleteProd(${p.id})">🗑️</button></td></tr>`;
   }).join('');
   renderPag('prod-pagination',data.length,prodPage,n=>{prodPage=n;renderProdutos();});
 }
@@ -1265,27 +1306,28 @@ async function saveProd(){
   if(editingProdId){
     const p=products.find(x=>x.id===editingProdId);
     Object.assign(p,{cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),validade:val,data_compra:comp,lote});
-    // Salva imediatamente no Google Sheets (update)
-    try {
-      showLoading('Salvando produto...');
-      await gsUpdate('products', editingProdId, p);
-    } catch(e){ console.warn('Erro ao atualizar produto no GS:', e); }
-    finally { hideLoading(); }
   } else {
     const novoProd = {id:Date.now(),cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,pedido:null,urgente:'',marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),status:'normal',validade:val,data_compra:comp,lote};
     products.push(novoProd);
-    // Salva imediatamente no Google Sheets (insert)
-    try {
-      showLoading('Cadastrando produto...');
-      await gsInsert('products', novoProd);
-    } catch(e){ console.warn('Erro ao inserir produto no GS:', e); }
-    finally { hideLoading(); }
   }
   closeModal('modal-prod');renderProdutos();renderValidade();renderDashboard();
-  saveMainState();
+  showLoading('Salvando produto...');
+  try { await gsSaveArray('products', products); } catch(e){ console.warn('Erro ao salvar produtos no GS:', e); }
+  hideLoading();
 }
 
-// ── VÍNCULOS PERSISTENTES ──────────────────────────────────────────────────
+// ── EXCLUIR PRODUTO ──────────────────────────────────────────────────────────
+async function deleteProd(id){
+  const p=products.find(x=>x.id===id);
+  if(!p)return;
+  if(!confirm(`Excluir o produto "${p.material}"?\n\nEsta ação não pode ser desfeita. O histórico de movimentações do produto será mantido.`))return;
+  products=products.filter(x=>x.id!==id);
+  renderProdutos();renderValidade();renderDashboard();updateCriticosBadge();
+  showLoading('Excluindo produto...');
+  try { await gsSaveArray('products', products); } catch(e){ console.warn('Erro ao excluir produto no GS:', e); }
+  hideLoading();
+  toast('🗑️ Produto excluído.','success');
+}
 // Estrutura: { "NOME_XML|COD_XML": prodId, ... }
 function loadVinc(){try{return JSON.parse(localStorage.getItem('fg_vinculos')||'{}');}catch{return{};}}
 function loadFatores(){try{return JSON.parse(localStorage.getItem('fg_fatores')||'{}');}catch{return{};}}
@@ -1578,6 +1620,10 @@ function searchOCParaNF(prefix){
   const seen = new Set(ocListItems.map(x=>x.id));
   const merged = [...ocListItems, ...poItems.filter(x=>!seen.has(x.id))];
 
+  // Ordena pelo mais recente primeiro (extrai timestamp do id)
+  const getTs = id => { const n=parseInt(String(id).replace(/\D/g,'')); return isNaN(n)?0:n; };
+  merged.sort((a,b)=>getTs(b.id)-getTs(a.id));
+
   const ocs = merged.filter(oc=>
     oc.numero.toLowerCase().includes(q)||
     oc.fornecedor.toLowerCase().includes(q)
@@ -1706,6 +1752,11 @@ function registrarNF(){
   // Vínculo com OC(s) é opcional — suporta múltiplas OCs
   const ocIdsRaw = document.getElementById('nf-oc-id')?.value?.trim()||'';
   const ocIds = ocIdsRaw ? ocIdsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+
+  // Alerta se nenhuma OC vinculada
+  if(!ocIds.length){
+    if(!confirm('⚠️ Esta NF não está vinculada a nenhum pedido de compra.\n\nDeseja continuar sem vínculo?')) return;
+  }
 
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
@@ -2830,9 +2881,13 @@ function gerarPedido(){
   const itens=products.filter(p=>p.pedido>0&&p.material);
   if(!itens.length){alert('Nenhum item com quantidade de pedido. Preencha as quantidades primeiro.');return;}
   if(!confirm(`Gerar Ordem de Compra com ${itens.length} item(s)?`))return;
+  const dataHoje=new Date();
+  const ddHoje=String(dataHoje.getDate()).padStart(2,'0');
+  const mmHoje=String(dataHoje.getMonth()+1).padStart(2,'0');
+  const aaaaHoje=dataHoje.getFullYear();
   const ordem={
     id:Date.now(),
-    numero:'OC-'+String(purchaseOrders.length+1).padStart(4,'0'),
+    numero:'Pedido '+ddHoje+'/'+mmHoje+'/'+aaaaHoje,
     data:new Date().toISOString().substring(0,10),
     itens:itens.map(p=>({
       prod_id:p.id,
@@ -3436,6 +3491,11 @@ function registrarNFManual(){
   const _mnfOcIdsRaw=document.getElementById('mnf-oc-id')?.value?.trim()||'';
   const ocId=_mnfOcIdsRaw.split(',')[0]?.trim()||'';
   const _mnfOcIds = _mnfOcIdsRaw ? _mnfOcIdsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+
+  // Alerta se nenhuma OC vinculada
+  if(!_mnfOcIds.length){
+    if(!confirm('⚠️ Esta NF não está vinculada a nenhum pedido de compra.\n\nDeseja continuar sem vínculo?')) return;
+  }
 
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
