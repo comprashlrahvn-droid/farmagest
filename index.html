@@ -1297,7 +1297,7 @@ function renderTags(){
 }
 function addMarca(t){const inp=document.getElementById(`inp-${t}`),v=inp.value.trim();if(!v)return;if(t==='pad')tempPad.push(v);else tempDesq.push(v);inp.value='';renderTags();}
 function rmMarca(t,i){if(t==='pad')tempPad.splice(i,1);else tempDesq.splice(i,1);renderTags();}
-async function saveProd(){
+function saveProd(){
   const mat=document.getElementById('mprod-material').value.trim();
   if(!mat){alert('Nome do material obrigatório!');return;}
   const val=document.getElementById('mprod-validade').value,comp=document.getElementById('mprod-compra').value,lote=document.getElementById('mprod-lote').value;
@@ -1310,9 +1310,7 @@ async function saveProd(){
     products.push(novoProd);
   }
   closeModal('modal-prod');renderProdutos();renderValidade();renderDashboard();
-  showLoading('Salvando produto...');
-  try { await gsSaveArray('products', products); } catch(e){ console.warn('Erro ao salvar produtos no GS:', e); }
-  hideLoading();
+  saveMainState(true);
 }
 
 // ── EXCLUIR PRODUTO ──────────────────────────────────────────────────────────
@@ -1322,9 +1320,7 @@ async function deleteProd(id){
   if(!confirm(`Excluir o produto "${p.material}"?\n\nEsta ação não pode ser desfeita. O histórico de movimentações do produto será mantido.`))return;
   products=products.filter(x=>x.id!==id);
   renderProdutos();renderValidade();renderDashboard();updateCriticosBadge();
-  showLoading('Excluindo produto...');
-  try { await gsSaveArray('products', products); } catch(e){ console.warn('Erro ao excluir produto no GS:', e); }
-  hideLoading();
+  saveMainState(true);
   toast('🗑️ Produto excluído.','success');
 }
 // Estrutura: { "NOME_XML|COD_XML": prodId, ... }
