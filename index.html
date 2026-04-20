@@ -1208,23 +1208,36 @@ function navTo(page,el){
 // DASHBOARD
 function renderDashboard(){
   const total=products.length;
-  const comPed=products.filter(p=>p.pedido>0).length;
-  const fat=products.filter(p=>p.status==='faturado').length;
-  const ent=products.filter(p=>p.status==='entregue').length;
   const vc=getValCurta().length;
+
+  // ─── DEDUPLICA nfHistory por id (evita dobrar contagens se GAS salvou duplicatas) ───
+  const _nfSeen=new Set();
+  const nfUniq=nfHistory.filter(n=>{if(_nfSeen.has(n.id))return false;_nfSeen.add(n.id);return true;});
+
+  // Stats baseados em nfUniq como fonte de verdade
+  const nfFat=nfUniq.filter(n=>n.status==='faturado').length;
+  const nfEnt=nfUniq.filter(n=>n.status==='entregue').length;
+  const nfTotal=nfUniq.length;
   const allEntr=getAllEntregas();
   const entConf=allEntr.filter(e=>e.situacao==='ENTREGUE').length;
+  // OCs abertas (de _ocList ou purchaseOrders)
+  const ocsAtivas=(window._ocList||purchaseOrders||[]).filter(o=>o.status&&o.status!=='entregue'&&o.status!=='cancelada'&&o.status!=='atendida').length;
 
   document.getElementById('dash-stats').innerHTML=`
     <div class="stat-card accent"><div class="stat-label">Total Produtos</div><div class="stat-value">${total}</div><div class="stat-sub">Itens no catálogo</div></div>
-    <div class="stat-card"><div class="stat-label">Com Pedido</div><div class="stat-value">${comPed}</div><div class="stat-sub">Aguardando faturamento</div></div>
-    <div class="stat-card warn"><div class="stat-label">Faturados</div><div class="stat-value">${fat}</div><div class="stat-sub">NF emitida — itens em amarelo</div></div>
-    <div class="stat-card green"><div class="stat-label">Entregues</div><div class="stat-value">${ent}</div><div class="stat-sub">Recebidos e confirmados</div></div>
+    <div class="stat-card"><div class="stat-label">OCs Abertas</div><div class="stat-value">${ocsAtivas}</div><div class="stat-sub">Aguardando faturamento</div></div>
+    <div class="stat-card warn"><div class="stat-label">Faturadas</div><div class="stat-value">${nfFat}</div><div class="stat-sub">NF emitida — ag. entrega</div></div>
+    <div class="stat-card green"><div class="stat-label">Entregues</div><div class="stat-value">${nfEnt}</div><div class="stat-sub">NFs confirmadas</div></div>
     <div class="stat-card ${vc>0?'warn':''}"><div class="stat-label">⚠️ Val. Curta</div><div class="stat-value">${vc}</div><div class="stat-sub">Vence em menos de 1 ano</div></div>
-    <div class="stat-card"><div class="stat-label">NFs Registradas</div><div class="stat-value">${nfHistory.length}</div><div class="stat-sub">${entConf} confirmadas</div></div>`;
+    <div class="stat-card"><div class="stat-label">NFs Registradas</div><div class="stat-value">${nfTotal}</div><div class="stat-sub">${entConf} confirmadas</div></div>`;
 
-  // Status mini-bar chart
-  const stats=[{label:'Sem pedido',val:products.filter(p=>!p.pedido&&p.status==='normal').length,c:'var(--text3)'},{label:'Com pedido',val:comPed,c:'var(--accent2)'},{label:'Faturado',val:fat,c:'var(--yellow)'},{label:'Entregue',val:ent,c:'var(--green)'}];
+  // Status mini-bar chart — usa dados de nfUniq para ser coerente com os cards
+  const stats=[
+    {label:'Sem OC',val:Math.max(0,total-ocsAtivas),c:'var(--text3)'},
+    {label:'OC Aberta',val:ocsAtivas,c:'var(--accent2)'},
+    {label:'Faturado',val:nfFat,c:'var(--yellow)'},
+    {label:'Entregue',val:nfEnt,c:'var(--green)'}
+  ];
   const mx=Math.max(...stats.map(s=>s.val),1);
   document.getElementById('status-chart').innerHTML=stats.map(s=>`<div class="mini-bar"><div class="mini-bar-label">${s.label}</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:${(s.val/mx*100).toFixed(0)}%;background:${s.c}"></div></div><div class="mini-bar-val">${s.val}</div></div>`).join('');
 
@@ -1313,16 +1326,19 @@ function renderDashboard(){
   document.getElementById('dash-forn-melhores').innerHTML=_fornBarHTML(melhores,false);
 
   // ─── TOP 15 ITENS FREQUÊNCIA + CONSUMO ───
-  // Agrupa itens de nfHistory por nome normalizado do produto
+  // Usa nfUniq (já deduplicado por NF id) e deduplica itens dentro de cada NF por descrição
   const itemFreq={};
-  nfHistory.forEach(nf=>{
+  nfUniq.forEach(nf=>{
+    const itemsVistos=new Set();
     (nf.itens||[]).forEach(it=>{
       const nome=(it.descricao||'').trim().toUpperCase();
       if(!nome)return;
+      // Deduplica item dentro da mesma NF
+      if(itemsVistos.has(nome))return;
+      itemsVistos.add(nome);
       if(!itemFreq[nome])itemFreq[nome]={nome,pedidos:0,qtdComprada:0,prodId:null};
       itemFreq[nome].pedidos++;
       itemFreq[nome].qtdComprada+=parseFloat(it.quantidade)||0;
-      // Tenta associar ao prod_id para consumo
       if(!itemFreq[nome].prodId&&it.matched&&it.matched.length>0){
         itemFreq[nome].prodId=it.matched[0].id;
       }
@@ -1352,11 +1368,15 @@ function renderDashboard(){
     :'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sem dados. Registre NFs para análise.</td></tr>';
 
   // ─── TOP 10 VALOR DE COMPRA ───
+  // Usa nfUniq + deduplica itens dentro de cada NF
   const itemValor={};
-  nfHistory.forEach(nf=>{
+  nfUniq.forEach(nf=>{
+    const itemsVistos=new Set();
     (nf.itens||[]).forEach(it=>{
       const nome=(it.descricao||'').trim().toUpperCase();
       if(!nome)return;
+      if(itemsVistos.has(nome))return;
+      itemsVistos.add(nome);
       const vu=parseFloat(it.valor_unitario)||0;
       const qtd=parseFloat(it.quantidade)||0;
       if(!itemValor[nome])itemValor[nome]={nome,ocorrencias:0,qtdTotal:0,somaValor:0,somaUnitario:0};
@@ -1380,12 +1400,16 @@ function renderDashboard(){
     :'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sem dados. Registre NFs com valores para análise.</td></tr>';
 
   // ─── ITENS COM MAIOR VARIAÇÃO DE PREÇO ───
+  // Usa nfUniq + deduplica itens dentro de cada NF (mantém apenas 1 preço por NF por item)
   const itemPrecos={};
-  nfHistory.forEach(nf=>{
+  nfUniq.forEach(nf=>{
+    const itemsVistos=new Set();
     (nf.itens||[]).forEach(it=>{
       const nome=(it.descricao||'').trim().toUpperCase();
       const vu=parseFloat(it.valor_unitario)||0;
       if(!nome||vu<=0)return;
+      if(itemsVistos.has(nome))return;
+      itemsVistos.add(nome);
       if(!itemPrecos[nome])itemPrecos[nome]={nome,precos:[],ocorrencias:0};
       itemPrecos[nome].precos.push(vu);
       itemPrecos[nome].ocorrencias++;
@@ -1415,7 +1439,7 @@ function renderDashboard(){
     }).join('')
     :'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sem dados suficientes. Necessário ao menos 2 NFs do mesmo item com valor registrado.</td></tr>';
 
-  document.getElementById('badge-pedidos').textContent=comPed;
+  document.getElementById('badge-pedidos').textContent=ocsAtivas;
   document.getElementById('badge-val').textContent=vc;
 }
 
