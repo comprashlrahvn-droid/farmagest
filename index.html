@@ -6069,6 +6069,9 @@ window.abrirModalNovaOC = async function() {
 
 window.fecharModalOC = function() {
   document.getElementById('modal-oc-form').classList.remove('open');
+  // CORREÇÃO: sempre zera o ID de edição ao fechar para evitar que uma
+  // nova OC herde o ID de uma OC anterior e cause duplicatas.
+  _ocEditingId = null;
 };
 
 window.searchFornOC = function() {
@@ -6366,9 +6369,13 @@ function salvarOC(oc) {
   } else {
     window._ocList.push(oc);
   }
-  // Persiste no Google Sheets
+  // CORRECAO: marca timestamp de save para impedir que o sync sobrescreva
+  // a lista local antes do save no GAS ser confirmado.
+  window._lastOCSaveTime = Date.now();
   if (window.gsSaveArray) {
-    window.gsSaveArray('oc_list', window._ocList);
+    Promise.resolve(window.gsSaveArray('oc_list', window._ocList))
+      .then(function() { window._lastOCSaveTime = Date.now(); })
+      .catch(function() { window._lastOCSaveTime = Date.now(); });
   }
 }
 
@@ -7066,14 +7073,8 @@ window.renderOCPage = function() {
   const q = (document.getElementById('search-oc') || {}).value?.toLowerCase() || '';
   const fs = (document.getElementById('filter-oc-status') || {}).value || '';
 
-  const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
-  const ocDedup={};
-  (window._ocList||[]).forEach(oc=>{
-    const chave=(oc.numero||oc.id||'').toString().trim();
-    const ex=ocDedup[chave];
-    if(!ex||(statusPrio[oc.status]||0)>(statusPrio[ex.status]||0))ocDedup[chave]=oc;
-  });
-  window._ocList=Object.values(ocDedup);
+  // CORRECAO: usa funcao centralizada de dedup em vez de logica inline
+  dedupOCList();
 
   const lista = window._ocList.filter(oc => {
     const mq = !q || oc.numero.toLowerCase().includes(q) || (oc.fornecedor || '').toLowerCase().includes(q);
@@ -7224,36 +7225,69 @@ function iniciarSincronizacao() {
 
 async function sincronizarDados() {
   if (!window.gsLoadArray || !window.currentUser) return;
-  // Não sincroniza se houver um save local pendente (evita sobrescrever dados não salvos)
   if (window._isSavePending && window._isSavePending()) return;
   if (window._produtosSendoSalvos) return;
+  // CORRECAO: nao sincroniza OCs se houve save local recente (janela de 15s)
+  // para evitar que o servidor retorne dados antigos e sobrescreva saves locais.
+  const ocSaveRecente = window._lastOCSaveTime && (Date.now() - window._lastOCSaveTime < 15000);
   try {
-    // Força recarregamento do estado principal
     await window.loadMainState();
-    // Recarrega OCs
     const ocsSalvas = await window.gsLoadArray('oc_list');
     if (Array.isArray(ocsSalvas) && ocsSalvas.length > 0) {
-      // Merge: mantém itens locais não salvos remotamente
-      window._ocList = ocsSalvas;
+      if (!ocSaveRecente) {
+        // CORRECAO: merge inteligente — preserva OCs locais que o servidor ainda
+        // nao conhece (id nao presente no remoto) para nao perder saves recentes.
+        const remoteIds = new Set(ocsSalvas.map(function(o) { return o.id; }));
+        const localOnly = (window._ocList || []).filter(function(o) { return !remoteIds.has(o.id); });
+        window._ocList = ocsSalvas.concat(localOnly);
+      }
     }
-    // Atualiza a view se a página de OC estiver ativa
     const pageOC = document.getElementById('page-oc');
     if (pageOC && pageOC.classList.contains('active')) {
       renderOCPage();
     }
-    // Atualiza dashboard se ativo
     const pageDash = document.getElementById('page-dashboard');
     if (pageDash && pageDash.classList.contains('active') && window.renderDashboard) {
       window.renderDashboard();
     }
   } catch(e) {
-    // Silencioso — não interrompe o uso offline
+    // Silencioso — nao interrompe o uso offline
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 11. CARREGAMENTO INICIAL DAS OCs SALVAS
 // ─────────────────────────────────────────────────────────────────────────────
+
+// CORRECAO: remove OCs duplicadas preservando a versao com status mais avancado.
+// Roda uma vez no carregamento e sempre que renderOCPage e chamado.
+function dedupOCList() {
+  if (!window._ocList || !window._ocList.length) return;
+  const statusPrio = {enviada:4, atendida:3, parcial:2, rascunho:1, cancelada:0};
+  const mapa = {};
+  window._ocList.forEach(function(oc) {
+    // Chave primaria: numero da OC. Fallback: id.
+    const chave = (oc.numero || oc.id || '').toString().trim();
+    if (!chave) return;
+    const ex = mapa[chave];
+    const prioAtual = statusPrio[oc.status] !== undefined ? statusPrio[oc.status] : -1;
+    const prioEx    = ex ? (statusPrio[ex.status] !== undefined ? statusPrio[ex.status] : -1) : -999;
+    if (!ex || prioAtual > prioEx) {
+      mapa[chave] = oc;
+    }
+  });
+  const antes = window._ocList.length;
+  window._ocList = Object.values(mapa);
+  const removidos = antes - window._ocList.length;
+  if (removidos > 0) {
+    console.warn('dedupOCList: removidas ' + removidos + ' OC(s) duplicadas.');
+    // Persiste lista limpa no servidor
+    if (window.gsSaveArray) {
+      window._lastOCSaveTime = Date.now();
+      window.gsSaveArray('oc_list', window._ocList);
+    }
+  }
+}
 
 async function carregarOCSalvas() {
   if (!window.gsLoadArray) return;
@@ -7264,6 +7298,8 @@ async function carregarOCSalvas() {
         ...oc,
         itens: typeof oc.itens === 'string' ? JSON.parse(oc.itens) : (oc.itens || [])
       }));
+      // CORRECAO: remove duplicatas imediatamente apos carregar do servidor
+      dedupOCList();
     }
   } catch(e) {}
 }
