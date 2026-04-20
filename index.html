@@ -4067,19 +4067,26 @@ async function loadMainState() {
     }
 
     if(Array.isArray(loadedNF) && loadedNF.length > 0) {
-      const nfMap={};
+      const sfPrio={entregue:3,suspensa:2,faturado:1};
+      const nfMapById={};
+      const nfMapByNum={};
       loadedNF.forEach(n=>{
         if(n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
         if(typeof n.itens === 'string') { try { n.itens = JSON.parse(n.itens); } catch(e){n.itens=[];} }
         if(typeof n.suspensao === 'string' && n.suspensao) { try { n.suspensao = JSON.parse(n.suspensao); } catch(e){} }
-        // Deduplica por id: mantém a entrada com status mais avançado
-        const sfPrio={entregue:3,suspensa:2,faturado:1};
-        const existing=nfMap[n.id];
-        if(!existing||(sfPrio[n.status]||0)>=(sfPrio[existing.status]||0)){
-          nfMap[n.id]=n;
+        // Dedup por id
+        const exId=nfMapById[n.id];
+        if(!exId||(sfPrio[n.status]||0)>=(sfPrio[exId.status]||0)) nfMapById[n.id]=n;
+        // Dedup por numero+fornecedor (caso mesma NF salva com ids distintos)
+        const chaveNum=((n.numero||'')+'|'+(n.fornecedor||'')).trim().toLowerCase();
+        if(chaveNum!=='|'){
+          const exNum=nfMapByNum[chaveNum];
+          if(!exNum||(sfPrio[n.status]||0)>=(sfPrio[exNum.status]||0)) nfMapByNum[chaveNum]=n;
         }
       });
-      nfHistory=Object.values(nfMap);
+      // Intersecção: mantém apenas os que passam pelos dois filtros
+      const idsSobreviventes=new Set(Object.values(nfMapByNum).map(n=>n.id));
+      nfHistory=Object.values(nfMapById).filter(n=>idsSobreviventes.has(n.id));
     }
 
     // GAS é a fonte autoritativa para movimentos — sempre carrega se disponível
@@ -4114,15 +4121,22 @@ async function loadMainState() {
       const loadedOCs = await gsLoadArray('oc_list');
       if(Array.isArray(loadedOCs) && loadedOCs.length > 0) {
         const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
+        // Deduplica por NUMERO (chave de negócio), mantendo status mais avançado
         const ocMap={};
         loadedOCs.forEach(oc=>{
           const parsed={...oc,itens:typeof oc.itens==='string'?(() => { try { return JSON.parse(oc.itens); } catch(e){ return []; } })():(oc.itens||[])};
-          const existing=ocMap[oc.id];
+          const chave=(parsed.numero||parsed.id||'').toString().trim();
+          const existing=ocMap[chave];
           if(!existing||(statusPrio[parsed.status]||0)>(statusPrio[existing.status]||0)){
-            ocMap[oc.id]=parsed;
+            ocMap[chave]=parsed;
           }
         });
         window._ocList=Object.values(ocMap);
+        // Persiste já limpa para o GAS para corrigir a planilha
+        if(window.gsSaveArray && window._ocList.length>0){
+          const ocsSer=window._ocList.map(oc=>({...oc,itens:JSON.stringify(oc.itens||[])}));
+          window.gsSaveArray('oc_list',ocsSer).catch(()=>{});
+        }
       }
     } catch(e) {}
 
@@ -7055,8 +7069,9 @@ window.renderOCPage = function() {
   const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
   const ocDedup={};
   (window._ocList||[]).forEach(oc=>{
-    const ex=ocDedup[oc.id];
-    if(!ex||(statusPrio[oc.status]||0)>(statusPrio[ex.status]||0))ocDedup[oc.id]=oc;
+    const chave=(oc.numero||oc.id||'').toString().trim();
+    const ex=ocDedup[chave];
+    if(!ex||(statusPrio[oc.status]||0)>(statusPrio[ex.status]||0))ocDedup[chave]=oc;
   });
   window._ocList=Object.values(ocDedup);
 
