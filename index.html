@@ -4067,13 +4067,19 @@ async function loadMainState() {
     }
 
     if(Array.isArray(loadedNF) && loadedNF.length > 0) {
-      nfHistory = loadedNF.map(n => {
+      const nfMap={};
+      loadedNF.forEach(n=>{
         if(n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
-        // itens pode ter sido serializado como string
         if(typeof n.itens === 'string') { try { n.itens = JSON.parse(n.itens); } catch(e){n.itens=[];} }
         if(typeof n.suspensao === 'string' && n.suspensao) { try { n.suspensao = JSON.parse(n.suspensao); } catch(e){} }
-        return n;
+        // Deduplica por id: mantém a entrada com status mais avançado
+        const sfPrio={entregue:3,suspensa:2,faturado:1};
+        const existing=nfMap[n.id];
+        if(!existing||(sfPrio[n.status]||0)>=(sfPrio[existing.status]||0)){
+          nfMap[n.id]=n;
+        }
       });
+      nfHistory=Object.values(nfMap);
     }
 
     // GAS é a fonte autoritativa para movimentos — sempre carrega se disponível
@@ -4107,10 +4113,16 @@ async function loadMainState() {
     try {
       const loadedOCs = await gsLoadArray('oc_list');
       if(Array.isArray(loadedOCs) && loadedOCs.length > 0) {
-        window._ocList = loadedOCs.map(oc => ({
-          ...oc,
-          itens: typeof oc.itens === 'string' ? (() => { try { return JSON.parse(oc.itens); } catch(e){ return []; } })() : (oc.itens||[])
-        }));
+        const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
+        const ocMap={};
+        loadedOCs.forEach(oc=>{
+          const parsed={...oc,itens:typeof oc.itens==='string'?(() => { try { return JSON.parse(oc.itens); } catch(e){ return []; } })():(oc.itens||[])};
+          const existing=ocMap[oc.id];
+          if(!existing||(statusPrio[parsed.status]||0)>(statusPrio[existing.status]||0)){
+            ocMap[oc.id]=parsed;
+          }
+        });
+        window._ocList=Object.values(ocMap);
       }
     } catch(e) {}
 
@@ -7039,6 +7051,14 @@ window.renderOCPage = function() {
 
   const q = (document.getElementById('search-oc') || {}).value?.toLowerCase() || '';
   const fs = (document.getElementById('filter-oc-status') || {}).value || '';
+
+  const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
+  const ocDedup={};
+  (window._ocList||[]).forEach(oc=>{
+    const ex=ocDedup[oc.id];
+    if(!ex||(statusPrio[oc.status]||0)>(statusPrio[ex.status]||0))ocDedup[oc.id]=oc;
+  });
+  window._ocList=Object.values(ocDedup);
 
   const lista = window._ocList.filter(oc => {
     const mq = !q || oc.numero.toLowerCase().includes(q) || (oc.fornecedor || '').toLowerCase().includes(q);
