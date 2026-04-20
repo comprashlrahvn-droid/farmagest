@@ -493,8 +493,76 @@ textarea.form-input{min-height:80px;resize:vertical;}
         <div class="dash-card"><h4>📊 Status dos Pedidos</h4><div id="status-chart"></div></div>
         <div class="dash-card"><h4>⚠️ Validade Curta (&lt;1 ano)</h4><div id="val-chart"></div></div>
       </div>
+
+      <!-- FORNECEDORES OCORRÊNCIAS -->
+      <div class="dash-grid" style="margin-bottom:20px;">
+        <div class="dash-card">
+          <h4>🔴 Top 5 — Maior Índice de Ocorrências</h4>
+          <div id="dash-forn-piores"></div>
+        </div>
+        <div class="dash-card">
+          <h4>🟢 Top 5 — Menor Índice de Ocorrências</h4>
+          <div id="dash-forn-melhores"></div>
+        </div>
+      </div>
+
+      <!-- ITENS FREQUÊNCIA + CONSUMO -->
+      <div class="dash-card" style="margin-bottom:20px;">
+        <h4>📦 15 Itens com Maior Frequência de Pedido e Consumo</h4>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.81rem;">
+            <thead><tr>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:left;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">#</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:left;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Material</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Pedidos (NFs)</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Qtd Total Comprada</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Saídas (Consumo)</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Score</th>
+            </tr></thead>
+            <tbody id="dash-freq-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TOP 10 VALOR DE COMPRA -->
+      <div class="dash-card" style="margin-bottom:20px;">
+        <h4>💰 10 Itens com Maior Valor Total de Compra</h4>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.81rem;">
+            <thead><tr>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:left;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">#</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:left;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Material</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Ocorrências NF</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Qtd Total</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:right;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Valor Unitário Médio</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:right;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Valor Total</th>
+            </tr></thead>
+            <tbody id="dash-valor-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VARIAÇÃO DE PREÇO -->
+      <div class="dash-card" style="margin-bottom:20px;">
+        <h4>📈 Itens com Maior Variação de Preço (histórico NFs)</h4>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.81rem;">
+            <thead><tr>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:left;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Material</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Menor Preço</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Maior Preço</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Variação R$</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Variação %</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-size:0.71rem;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)">Ocorrências</th>
+            </tr></thead>
+            <tbody id="dash-variacao-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ÚLTIMAS ENTREGAS -->
       <div class="section-title">Entregas Recentes</div>
-      <div class="table-wrap"><table><thead><tr><th>Fornecedor</th><th>NF</th><th>Data</th><th>Previsão</th><th>Situação</th></tr></thead><tbody id="dash-entregas"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fornecedor</th><th>NF</th><th>Data</th><th>Itens</th><th>Situação</th></tr></thead><tbody id="dash-entregas"></tbody></table></div>
     </div>
 
     <!-- PEDIDOS -->
@@ -1144,20 +1212,209 @@ function renderDashboard(){
   const fat=products.filter(p=>p.status==='faturado').length;
   const ent=products.filter(p=>p.status==='entregue').length;
   const vc=getValCurta().length;
+  const allEntr=getAllEntregas();
+  const entConf=allEntr.filter(e=>e.situacao==='ENTREGUE').length;
+
   document.getElementById('dash-stats').innerHTML=`
     <div class="stat-card accent"><div class="stat-label">Total Produtos</div><div class="stat-value">${total}</div><div class="stat-sub">Itens no catálogo</div></div>
     <div class="stat-card"><div class="stat-label">Com Pedido</div><div class="stat-value">${comPed}</div><div class="stat-sub">Aguardando faturamento</div></div>
     <div class="stat-card warn"><div class="stat-label">Faturados</div><div class="stat-value">${fat}</div><div class="stat-sub">NF emitida — itens em amarelo</div></div>
     <div class="stat-card green"><div class="stat-label">Entregues</div><div class="stat-value">${ent}</div><div class="stat-sub">Recebidos e confirmados</div></div>
     <div class="stat-card ${vc>0?'warn':''}"><div class="stat-label">⚠️ Val. Curta</div><div class="stat-value">${vc}</div><div class="stat-sub">Vence em menos de 1 ano</div></div>
-    <div class="stat-card"><div class="stat-label">Entregas</div><div class="stat-value">${entregas.length}</div><div class="stat-sub">${entregas.filter(e=>e.situacao==='ENTREGUE').length} confirmadas</div></div>`;
+    <div class="stat-card"><div class="stat-label">NFs Registradas</div><div class="stat-value">${nfHistory.length}</div><div class="stat-sub">${entConf} confirmadas</div></div>`;
+
+  // Status mini-bar chart
   const stats=[{label:'Sem pedido',val:products.filter(p=>!p.pedido&&p.status==='normal').length,c:'var(--text3)'},{label:'Com pedido',val:comPed,c:'var(--accent2)'},{label:'Faturado',val:fat,c:'var(--yellow)'},{label:'Entregue',val:ent,c:'var(--green)'}];
   const mx=Math.max(...stats.map(s=>s.val),1);
   document.getElementById('status-chart').innerHTML=stats.map(s=>`<div class="mini-bar"><div class="mini-bar-label">${s.label}</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:${(s.val/mx*100).toFixed(0)}%;background:${s.c}"></div></div><div class="mini-bar-val">${s.val}</div></div>`).join('');
+
+  // Validade curta chart
   const vcItems=getValCurta();
   if(!vcItems.length){document.getElementById('val-chart').innerHTML='<div style="color:var(--green);font-size:0.85rem;text-align:center;padding:20px">✅ Nenhum item crítico</div>';}
   else{document.getElementById('val-chart').innerHTML=vcItems.slice(0,6).map(p=>{const d=Math.ceil((new Date(p.validade)-new Date())/(864e5));const c=d<60?'var(--red)':d<180?'var(--yellow)':'var(--accent)';const pct=Math.max(8,Math.min(100,(d/365)*100));return`<div class="mini-bar"><div class="mini-bar-label" title="${p.material}">${p.material.substring(0,18)}</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct.toFixed(0)}%;background:${c}"></div></div><div class="mini-bar-val" style="color:${c}">${d}d</div></div>`;}).join('');}
-  document.getElementById('dash-entregas').innerHTML=entregas.slice(0,8).map(e=>`<tr><td>${e.fornecedor}</td><td class="dim">${e.nota_fiscal||'—'}</td><td class="dim">${e.data}</td><td class="dim">${e.previsao||'—'}</td><td><span class="status-badge status-${e.situacao.toLowerCase()}">${e.situacao}</span></td></tr>`).join('');
+
+  // ─── ÚLTIMAS ENTREGAS (usando getAllEntregas para incluir NFs) ───
+  const sortedEntr=[...allEntr].sort((a,b)=>{
+    const da=a.data?a.data.split('/').reverse().join('-'):'';
+    const db=b.data?b.data.split('/').reverse().join('-'):'';
+    return db.localeCompare(da);
+  });
+  document.getElementById('dash-entregas').innerHTML=sortedEntr.slice(0,10).map(e=>{
+    const sitCls=e.situacao==='ENTREGUE'?'badge-green':e.situacao==='SUSPENSA'?'badge-red':'badge-yellow';
+    return`<tr>
+      <td><b>${e.fornecedor||'—'}</b></td>
+      <td class="dim">${e.nota_fiscal||'—'}</td>
+      <td class="dim">${e.data||'—'}</td>
+      <td class="dim">${e.itens_count||'—'} item(s)</td>
+      <td><span class="badge ${sitCls}">${e.situacao}</span></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Nenhuma entrega registrada.</td></tr>';
+
+  // ─── ANÁLISE FORNECEDORES POR OCORRÊNCIAS ───
+  // Monta mapa: fornecedor -> {nfs, divergencias}
+  const fornMap={};
+  nfHistory.forEach(n=>{
+    const k=(n.fornecedor||'').trim();
+    if(!k)return;
+    if(!fornMap[k])fornMap[k]={nfs:0,divergencias:0};
+    fornMap[k].nfs++;
+  });
+  // Conta divergências das conferências (via conf_entregas)
+  const confs=window._conferencias||[];
+  const fornById={};
+  (window._fornecedores||[]).forEach(f=>{fornById[f.id]=f.name;});
+  confs.forEach(c=>{
+    if(c.resultado!=='divergente')return;
+    // Tenta associar via fornecedor direto ou pelo nome
+    const nomeForn=(fornById[c.supplierId]||c.supplierId||'').trim();
+    if(!nomeForn)return;
+    // Busca match exato ou parcial
+    const chave=Object.keys(fornMap).find(k=>k.toLowerCase()===nomeForn.toLowerCase())||
+                Object.keys(fornMap).find(k=>k.toLowerCase().includes(nomeForn.toLowerCase())||nomeForn.toLowerCase().includes(k.toLowerCase()));
+    if(chave)fornMap[chave].divergencias++;
+    else{
+      // adiciona mesmo sem NF (fornecedor registrado mas sem NF ainda)
+      if(!fornMap[nomeForn])fornMap[nomeForn]={nfs:0,divergencias:0};
+      fornMap[nomeForn].divergencias++;
+    }
+  });
+
+  // Calcula índice de ocorrência ponderado
+  const fornList=Object.entries(fornMap).filter(([,v])=>v.nfs>0||v.divergencias>0).map(([nome,v])=>{
+    // Índice = divergencias / max(nfs,1) — ponderado: fornecedores com 1-2 NFs têm peso menor
+    const peso=Math.log2(Math.max(v.nfs,1)+1); // penaliza quem tem poucas NFs
+    const idx=v.nfs>0?(v.divergencias/v.nfs)*100:0;
+    const idxPonderado=v.nfs>0?idx*(peso/(Math.log2(v.nfs+2))):0; // normaliza pelo volume
+    return{nome,nfs:v.nfs,divergencias:v.divergencias,idx:idx.toFixed(1),idxPonderado};
+  });
+
+  // Só considera fornecedores com ao menos 1 NF para evitar distorção
+  const fornComNF=fornList.filter(f=>f.nfs>=1).sort((a,b)=>b.idxPonderado-a.idxPonderado);
+  const piores=fornComNF.slice(0,5);
+  const melhores=[...fornComNF].sort((a,b)=>a.idxPonderado-b.idxPonderado).slice(0,5);
+
+  function _fornBarHTML(list,pior){
+    if(!list.length)return'<div style="color:var(--text3);font-size:0.82rem;text-align:center;padding:16px">Sem dados suficientes.<br><span style="font-size:0.72rem">Registre NFs e conferências de entrega.</span></div>';
+    return list.map(f=>{
+      const c=pior?(f.idx>=20?'var(--red)':f.idx>=10?'var(--yellow)':'var(--accent)'):'var(--green)';
+      const pct=Math.min(100,parseFloat(f.idx));
+      return`<div class="mini-bar" style="margin-bottom:10px">
+        <div class="mini-bar-label" title="${f.nome}" style="width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.nome.substring(0,22)}</div>
+        <div class="mini-bar-track" style="flex:1"><div class="mini-bar-fill" style="width:${Math.max(pct,3)}%;background:${c}"></div></div>
+        <div style="display:flex;gap:6px;align-items:center;min-width:120px;justify-content:flex-end">
+          <span style="font-size:0.7rem;color:var(--text3)">${f.nfs} NF${f.nfs!==1?'s':''}</span>
+          <span class="badge ${parseFloat(f.idx)===0?'badge-green':parseFloat(f.idx)<10?'badge-yellow':'badge-red'}">${f.divergencias} ocorr.</span>
+          <span style="font-size:0.78rem;font-weight:700;color:${c};min-width:38px;text-align:right">${f.idx}%</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('dash-forn-piores').innerHTML=_fornBarHTML(piores,true);
+  document.getElementById('dash-forn-melhores').innerHTML=_fornBarHTML(melhores,false);
+
+  // ─── TOP 15 ITENS FREQUÊNCIA + CONSUMO ───
+  // Agrupa itens de nfHistory por nome normalizado do produto
+  const itemFreq={};
+  nfHistory.forEach(nf=>{
+    (nf.itens||[]).forEach(it=>{
+      const nome=(it.descricao||'').trim().toUpperCase();
+      if(!nome)return;
+      if(!itemFreq[nome])itemFreq[nome]={nome,pedidos:0,qtdComprada:0,prodId:null};
+      itemFreq[nome].pedidos++;
+      itemFreq[nome].qtdComprada+=parseFloat(it.quantidade)||0;
+      // Tenta associar ao prod_id para consumo
+      if(!itemFreq[nome].prodId&&it.matched&&it.matched.length>0){
+        itemFreq[nome].prodId=it.matched[0].id;
+      }
+      if(!itemFreq[nome].prodId&&it.cod_prod){
+        const p=products.find(x=>x.cod_bionexo===it.cod_prod||x.cod_hlr===it.cod_prod);
+        if(p)itemFreq[nome].prodId=p.id;
+      }
+    });
+  });
+  // Calcula consumo (saídas) de cada item
+  const freqList=Object.values(itemFreq).map(item=>{
+    const saidas=item.prodId?movimentos.filter(m=>m.prod_id==item.prodId&&m.tipo==='saida').reduce((s,m)=>s+m.qtd,0):0;
+    // Score composto: normaliza pedidos + qtd + saidas
+    return{...item,saidas,score:item.pedidos*3+item.qtdComprada*0.01+saidas*0.05};
+  }).sort((a,b)=>b.score-a.score).slice(0,15);
+
+  const fmtQty=n=>n>0?n.toLocaleString('pt-BR',{maximumFractionDigits:0}):'—';
+  document.getElementById('dash-freq-body').innerHTML=freqList.length
+    ?freqList.map((it,i)=>`<tr style="border-bottom:1px solid rgba(37,48,71,0.4)">
+        <td style="padding:7px 10px;color:var(--text3)">${i+1}</td>
+        <td style="padding:7px 10px"><b>${it.nome.substring(0,50)}${it.nome.length>50?'…':''}</b></td>
+        <td style="padding:7px 10px;text-align:center"><span class="badge badge-blue">${it.pedidos}</span></td>
+        <td style="padding:7px 10px;text-align:center">${fmtQty(it.qtdComprada)}</td>
+        <td style="padding:7px 10px;text-align:center">${fmtQty(it.saidas)}</td>
+        <td style="padding:7px 10px;text-align:center"><b style="color:var(--accent)">${it.score.toFixed(0)}</b></td>
+      </tr>`).join('')
+    :'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sem dados. Registre NFs para análise.</td></tr>';
+
+  // ─── TOP 10 VALOR DE COMPRA ───
+  const itemValor={};
+  nfHistory.forEach(nf=>{
+    (nf.itens||[]).forEach(it=>{
+      const nome=(it.descricao||'').trim().toUpperCase();
+      if(!nome)return;
+      const vu=parseFloat(it.valor_unitario)||0;
+      const qtd=parseFloat(it.quantidade)||0;
+      if(!itemValor[nome])itemValor[nome]={nome,ocorrencias:0,qtdTotal:0,somaValor:0,somaUnitario:0};
+      itemValor[nome].ocorrencias++;
+      itemValor[nome].qtdTotal+=qtd;
+      itemValor[nome].somaValor+=vu*qtd;
+      itemValor[nome].somaUnitario+=vu;
+    });
+  });
+  const valorList=Object.values(itemValor).filter(x=>x.somaValor>0).sort((a,b)=>b.somaValor-a.somaValor).slice(0,10);
+  const fmtBRL=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  document.getElementById('dash-valor-body').innerHTML=valorList.length
+    ?valorList.map((it,i)=>`<tr style="border-bottom:1px solid rgba(37,48,71,0.4)">
+        <td style="padding:7px 10px;color:var(--text3)">${i+1}</td>
+        <td style="padding:7px 10px"><b>${it.nome.substring(0,48)}${it.nome.length>48?'…':''}</b></td>
+        <td style="padding:7px 10px;text-align:center"><span class="badge badge-blue">${it.ocorrencias}</span></td>
+        <td style="padding:7px 10px;text-align:center">${fmtQty(it.qtdTotal)}</td>
+        <td style="padding:7px 10px;text-align:right;color:var(--text2)">${fmtBRL(it.somaUnitario/it.ocorrencias)}</td>
+        <td style="padding:7px 10px;text-align:right;font-weight:700;color:var(--yellow)">${fmtBRL(it.somaValor)}</td>
+      </tr>`).join('')
+    :'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sem dados. Registre NFs com valores para análise.</td></tr>';
+
+  // ─── ITENS COM MAIOR VARIAÇÃO DE PREÇO ───
+  const itemPrecos={};
+  nfHistory.forEach(nf=>{
+    (nf.itens||[]).forEach(it=>{
+      const nome=(it.descricao||'').trim().toUpperCase();
+      const vu=parseFloat(it.valor_unitario)||0;
+      if(!nome||vu<=0)return;
+      if(!itemPrecos[nome])itemPrecos[nome]={nome,precos:[],ocorrencias:0};
+      itemPrecos[nome].precos.push(vu);
+      itemPrecos[nome].ocorrencias++;
+    });
+  });
+  const varList=Object.values(itemPrecos)
+    .filter(x=>x.precos.length>=2)
+    .map(x=>{
+      const mn=Math.min(...x.precos),mx2=Math.max(...x.precos);
+      const varAbs=mx2-mn;
+      const varPct=mn>0?((mx2-mn)/mn*100):0;
+      return{...x,min:mn,max:mx2,varAbs,varPct};
+    })
+    .sort((a,b)=>b.varPct-a.varPct)
+    .slice(0,15);
+  document.getElementById('dash-variacao-body').innerHTML=varList.length
+    ?varList.map(it=>{
+      const c=it.varPct>=50?'var(--red)':it.varPct>=20?'var(--yellow)':'var(--accent)';
+      return`<tr style="border-bottom:1px solid rgba(37,48,71,0.4)">
+        <td style="padding:7px 10px"><b>${it.nome.substring(0,44)}${it.nome.length>44?'…':''}</b></td>
+        <td style="padding:7px 10px;text-align:center;color:var(--green)">${fmtBRL(it.min)}</td>
+        <td style="padding:7px 10px;text-align:center;color:var(--red)">${fmtBRL(it.max)}</td>
+        <td style="padding:7px 10px;text-align:center;font-weight:600;color:${c}">${fmtBRL(it.varAbs)}</td>
+        <td style="padding:7px 10px;text-align:center"><span class="badge ${it.varPct>=50?'badge-red':it.varPct>=20?'badge-yellow':'badge-green'}">${it.varPct.toFixed(1)}%</span></td>
+        <td style="padding:7px 10px;text-align:center;color:var(--text3)">${it.ocorrencias}</td>
+      </tr>`;
+    }).join('')
+    :'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sem dados suficientes. Necessário ao menos 2 NFs do mesmo item com valor registrado.</td></tr>';
+
   document.getElementById('badge-pedidos').textContent=comPed;
   document.getElementById('badge-val').textContent=vc;
 }
