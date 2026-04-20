@@ -472,7 +472,12 @@ textarea.form-input{min-height:80px;resize:vertical;}
   <button class="nav-item" id="nav-btn-usuarios" style="display:none" onclick="navTo('usuarios',this)"><span class="icon">👥</span> Usuários</button>
   <div class="sidebar-footer" id="sf-logged" style="display:none;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.15);">
     <div style="font-size:0.7rem;color:rgba(255,255,255,0.5)" id="sf-username"></div>
-    <div style="display:flex;gap:8px;margin-top:5px">
+    <!-- STATUS DE SINCRONIZAÇÃO COM BANCO DE DADOS -->
+    <div id="gas-status-bar" style="margin:6px 0 4px;padding:5px 8px;border-radius:6px;background:rgba(255,255,255,0.07);font-size:0.66rem;display:flex;align-items:center;gap:5px;cursor:pointer;" onclick="testarConexaoGAS()" title="Clique para testar conexão com o banco de dados">
+      <span id="gas-status-dot" style="width:7px;height:7px;border-radius:50%;background:#888;display:inline-block;flex-shrink:0;"></span>
+      <span id="gas-status-text" style="color:rgba(255,255,255,0.45);">BD: verificando...</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
       <button onclick="abrirModalPerfil()" style="background:rgba(255,255,255,0.1);border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:0.68rem;padding:3px 8px;border-radius:5px;">👤 Meu Perfil</button>
       <button onclick="doLogout()" style="background:none;border:none;color:rgba(255,255,255,0.45);cursor:pointer;font-size:0.68rem;padding:3px 0;">↩ Sair</button>
     </div>
@@ -3877,6 +3882,39 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId){
 const GS_API = 'https://script.google.com/macros/s/AKfycbzjgrwffArhBIni0wcfmD00uybbX6OyGX6VGRQMHq869GfKKGe30l_6XPpw3v0iKPyMPA/exec';
 const gsCache = {};
 
+// ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
+async function testarConexaoGAS() {
+  const dot  = document.getElementById('gas-status-dot');
+  const txt  = document.getElementById('gas-status-text');
+  if(dot) { dot.style.background = '#f39c12'; }
+  if(txt) { txt.textContent = 'BD: testando...'; }
+  try {
+    const r = await Promise.race([
+      fetch(GS_API + '?action=test'),
+      new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 10000))
+    ]);
+    const data = await r.json();
+    if(data && (data.status === 'ok' || data.message)) {
+      if(dot) { dot.style.background = '#27ae60'; }
+      if(txt) { txt.textContent = 'BD: conectado ✓'; }
+      window._gasSaveErrorNotified = false; // reset erro para próxima falha poder notificar
+      toast('✅ Banco de dados conectado! GAS respondeu corretamente.', 'success');
+    } else {
+      throw new Error(data.error || 'Resposta inesperada do GAS');
+    }
+  } catch(e) {
+    if(dot) { dot.style.background = '#e74c3c'; }
+    if(txt) { txt.textContent = 'BD: erro ✗'; }
+    toast('❌ Banco de dados inacessível: ' + e.message + '\n\nVerifique se o GAS está publicado corretamente.', 'error');
+    console.error('[GAS TEST]', e);
+  }
+}
+
+// Executa teste de conexão ao abrir o app
+window._testarGASNoLogin = function() {
+  setTimeout(testarConexaoGAS, 2000);
+};
+
 async function gsGetAll(sheet, force=false) {
   if(!gsCache[sheet]||force) {
     try {
@@ -3919,11 +3957,11 @@ async function gsDelete(sheet, id) {
 // O valor é armazenado em uma coluna "json" como string JSON compacta.
 // Isso evita o limite de 50k chars por célula usando compressão de campos.
 
-// Salva um array inteiro como uma linha JSON em uma aba dedicada
+// Salva um array inteiro como chunks JSON em abas dedicadas
+// CHUNK_SIZE pequeno evita estouro do limite de 50KB por célula do Google Sheets
 async function gsSaveArray(sheet, dataArray) {
-  // CORRIGIDO: delete+insert garantido em vez de update condicional
   try {
-    const chunkSize = 200;
+    const chunkSize = 30; // CRÍTICO: 30 itens ~9KB por célula — dentro do limite de 50KB
     gsCache[sheet] = null;
 
     const chunks = [];
@@ -3932,27 +3970,51 @@ async function gsSaveArray(sheet, dataArray) {
     }
     if(chunks.length === 0) chunks.push([]);
 
-    // Para cada chunk: tenta update; se falhar, garante insert
-    for(let c = 0; c < chunks.length; c++) {
-      const chunkId = sheet + '_' + c;
-      const payload = { id: chunkId, chunk: c, total: chunks.length, json: JSON.stringify(chunks[c]) };
-      const upd = await gsUpdate(sheet, chunkId, payload);
-      if(!upd || upd.status === 'not_found' || upd.error) {
-        // Deleta por precaução antes de inserir (evita duplicata)
-        await gsDelete(sheet, chunkId).catch(()=>{});
-        await gsInsert(sheet, payload);
-      }
-    }
+    let algumErro = false;
 
-    // Remove chunks excedentes de saves anteriores com mais chunks
-    for(let c = chunks.length; c < chunks.length + 15; c++) {
+    // Estratégia UPSERT: tenta update, se não encontrar → insert
+    // Executa em paralelo para melhor performance
+    const upsertPromises = chunks.map(async (chunk, c) => {
       const chunkId = sheet + '_' + c;
-      const del = await gsDelete(sheet, chunkId);
-      if(!del || del.status === 'not_found') break;
+      const payload = { id: chunkId, chunk: c, total: chunks.length, json: JSON.stringify(chunk) };
+      try {
+        const upd = await gsUpdate(sheet, chunkId, payload);
+        if(!upd || upd.status === 'not_found' || upd.error) {
+          // Linha não existe ainda — deleta por precaução e insere
+          await gsDelete(sheet, chunkId).catch(()=>{});
+          const ins = await gsInsert(sheet, payload);
+          if(!ins || ins.error) algumErro = true;
+        }
+      } catch(e) { algumErro = true; }
+    });
+    await Promise.all(upsertPromises);
+
+    // Remove chunks excedentes de saves anteriores (limpeza de duplicatas antigas)
+    const deletePromises = [];
+    for(let c = chunks.length; c < chunks.length + 20; c++) {
+      deletePromises.push(
+        gsDelete(sheet, sheet + '_' + c).then(del => {
+          if(!del || del.status === 'not_found') return 'stop';
+          return 'ok';
+        }).catch(() => 'stop')
+      );
     }
+    await Promise.all(deletePromises);
 
     gsCache[sheet] = null;
-  } catch(e) { console.warn('gsSaveArray error ('+sheet+'):', e); }
+
+    if(algumErro) {
+      console.warn('[GAS] Erros ao salvar "' + sheet + '" — verifique o deploy do GAS.');
+      // Notifica usuário se salvo falhar — mas só 1x por sessão por aba
+      if(!window._gasSaveErrorNotified) {
+        window._gasSaveErrorNotified = true;
+        toast('⚠️ Falha ao salvar no banco de dados. Verifique a conexão com o GAS.', 'error');
+      }
+    }
+  } catch(e) {
+    console.warn('gsSaveArray error ('+sheet+'):', e);
+    toast('❌ Erro crítico ao salvar dados: ' + e.message, 'error');
+  }
 }
 
 // Carrega um array salvo com gsSaveArray
@@ -3961,10 +4023,21 @@ async function gsLoadArray(sheet) {
     const rows = await gsGetAll(sheet, true);
     if(!Array.isArray(rows) || rows.length === 0) return null;
     // Filtra apenas linhas de chunks desta aba
-    const chunks = rows
-      .filter(r => String(r.id||'').startsWith(sheet+'_'))
+    const allChunks = rows.filter(r => String(r.id||'').startsWith(sheet+'_'));
+    if(allChunks.length === 0) return null;
+
+    // DEDUPLICAÇÃO: se houver múltiplas linhas com mesmo chunk id (bug de insert duplicado),
+    // mantém apenas a mais recente (último timestamp ou última posição na lista)
+    const chunkMap = {};
+    for(const row of allChunks) {
+      const cId = String(row.id||'');
+      // Última ocorrência vence (mais recente no sheet)
+      chunkMap[cId] = row;
+    }
+
+    const chunks = Object.values(chunkMap)
       .sort((a,b) => Number(a.chunk||0) - Number(b.chunk||0));
-    if(chunks.length === 0) return null;
+
     let result = [];
     for(const c of chunks) {
       if(c.json) {
@@ -4296,6 +4369,8 @@ function showApp() {
       products = localBackup;
     }
   } catch(e){}
+  // Testa conexão com banco de dados após login
+  if(window._testarGASNoLogin) window._testarGASNoLogin();
   // Re-render dashboard e badges com dados já carregados
   renderDashboard();
   renderPedidos();
