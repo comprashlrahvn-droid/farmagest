@@ -4237,11 +4237,10 @@ async function loadMainState() {
           }
         });
         window._ocList=Object.values(ocMap);
-        // Persiste já limpa para o GAS para corrigir a planilha
-        if(window.gsSaveArray && window._ocList.length>0){
-          const ocsSer=window._ocList.map(oc=>({...oc,itens:JSON.stringify(oc.itens||[])}));
-          window.gsSaveArray('oc_list',ocsSer).catch(()=>{});
-        }
+        // CORREÇÃO DEFINITIVA: NÃO re-salva aqui — causa race condition se um save
+        // de OC nova ainda estiver em andamento no GAS. O re-save de dedup só ocorre
+        // quando o usuário faz uma ação explícita (salvar/cancelar/excluir OC).
+        // if(window.gsSaveArray && window._ocList.length>0){ ... } // REMOVIDO
       }
     } catch(e) {}
 
@@ -6476,13 +6475,22 @@ function salvarOC(oc) {
   } else {
     window._ocList.push(oc);
   }
-  // CORRECAO: marca timestamp de save para impedir que o sync sobrescreva
-  // a lista local antes do save no GAS ser confirmado.
-  window._lastOCSaveTime = Date.now();
+  // CORREÇÃO DEFINITIVA: serializa itens antes de salvar (igual ao _doSaveMainState)
+  const ocsSer = window._ocList.map(function(o) {
+    return Object.assign({}, o, { itens: typeof o.itens === 'string' ? o.itens : JSON.stringify(o.itens || []) });
+  });
+  // Marca proteção ANTES do save (bloqueia sync durante todo o processo)
+  // Janela ampliada para 90s — cobre saves lentos com muitos chunks no GAS
+  window._lastOCSaveTime = Date.now() + 75000; // pre-bloqueia por 75s extra
   if (window.gsSaveArray) {
-    Promise.resolve(window.gsSaveArray('oc_list', window._ocList))
-      .then(function() { window._lastOCSaveTime = Date.now(); })
-      .catch(function() { window._lastOCSaveTime = Date.now(); });
+    Promise.resolve(window.gsSaveArray('oc_list', ocsSer))
+      .then(function() {
+        // Renova timestamp ao CONCLUIR — bloqueia por mais 30s para sync não sobrescrever
+        window._lastOCSaveTime = Date.now() + 30000;
+      })
+      .catch(function() {
+        window._lastOCSaveTime = Date.now() + 30000;
+      });
   }
 }
 
@@ -7337,9 +7345,9 @@ async function sincronizarDados() {
   // Nao sincroniza se houve save local nos últimos 30s — janela ampliada para saves sequenciais
   const saveRecente = window._lastSaveCompleteTime && (Date.now() - window._lastSaveCompleteTime < 30000);
   if (saveRecente) return;
-  // CORRECAO: nao sincroniza OCs se houve save local recente (janela de 15s)
-  // para evitar que o servidor retorne dados antigos e sobrescreva saves locais.
-  const ocSaveRecente = window._lastOCSaveTime && (Date.now() - window._lastOCSaveTime < 15000);
+  // CORREÇÃO DEFINITIVA: _lastOCSaveTime pode ser um timestamp futuro (pre-bloqueio).
+  // A verificação correta é: se o tempo atual ainda está dentro da janela de proteção.
+  const ocSaveRecente = window._lastOCSaveTime && (window._lastOCSaveTime > Date.now() || (Date.now() - window._lastOCSaveTime < 60000));
   try {
     await window.loadMainState();
     const ocsSalvas = await window.gsLoadArray('oc_list');
@@ -7401,12 +7409,14 @@ function dedupOCList() {
 
 async function carregarOCSalvas() {
   if (!window.gsLoadArray) return;
+  // Não carrega se há um save de OC recente/em andamento — evita sobrescrever com dados antigos
+  if (window._lastOCSaveTime && window._lastOCSaveTime > Date.now()) return;
   try {
     const salvas = await window.gsLoadArray('oc_list');
     if (Array.isArray(salvas) && salvas.length > 0) {
       window._ocList = salvas.map(oc => ({
         ...oc,
-        itens: typeof oc.itens === 'string' ? JSON.parse(oc.itens) : (oc.itens || [])
+        itens: typeof oc.itens === 'string' ? (() => { try { return JSON.parse(oc.itens); } catch(e) { return []; } })() : (oc.itens || [])
       }));
       // CORRECAO: remove duplicatas imediatamente apos carregar do servidor
       dedupOCList();
