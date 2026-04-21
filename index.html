@@ -3924,30 +3924,37 @@ async function gsGetAll(sheet, force=false) {
   }
   return gsCache[sheet]||[];
 }
+// CORREÇÃO CRÍTICA: GAS redireciona POST cross-origin para GET (302 redirect),
+// perdendo o body da requisição. Solução: usar GET com dados na URL.
+// GAS web apps sempre processam GET diretamente, sem redirect.
 async function gsInsert(sheet, data) {
   try {
-    const r = await fetch(GS_API, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'insert', sheet, data }),
-    });
+    const url = GS_API
+      + '?action=insert'
+      + '&sheet=' + encodeURIComponent(sheet)
+      + '&data='  + encodeURIComponent(JSON.stringify(data));
+    const r = await fetch(url);
     return await r.json();
   } catch(e) { return null; }
 }
 async function gsUpdate(sheet, id, data) {
   try {
-    const r = await fetch(GS_API, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'update', sheet, id, data }),
-    });
+    const url = GS_API
+      + '?action=update'
+      + '&sheet=' + encodeURIComponent(sheet)
+      + '&id='   + encodeURIComponent(String(id))
+      + '&data=' + encodeURIComponent(JSON.stringify(data));
+    const r = await fetch(url);
     return await r.json();
   } catch(e) { return null; }
 }
 async function gsDelete(sheet, id) {
   try {
-    const r = await fetch(GS_API, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'delete', sheet, id }),
-    });
+    const url = GS_API
+      + '?action=delete'
+      + '&sheet=' + encodeURIComponent(sheet)
+      + '&id='   + encodeURIComponent(String(id));
+    const r = await fetch(url);
     return await r.json();
   } catch(e) { return null; }
 }
