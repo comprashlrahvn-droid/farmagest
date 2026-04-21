@@ -3961,7 +3961,9 @@ async function gsDelete(sheet, id) {
 // CHUNK_SIZE pequeno evita estouro do limite de 50KB por célula do Google Sheets
 async function gsSaveArray(sheet, dataArray) {
   try {
-    const chunkSize = 30; // CRÍTICO: 30 itens ~9KB por célula — dentro do limite de 50KB
+    // CRÍTICO: 10 itens por chunk (~3KB) — seguro mesmo para objetos grandes (NFs, OCs)
+    // NÃO aumentar sem testar: cada célula do Google Sheets suporta até 50KB de texto
+    const chunkSize = 10;
     gsCache[sheet] = null;
 
     const chunks = [];
@@ -3972,9 +3974,10 @@ async function gsSaveArray(sheet, dataArray) {
 
     let algumErro = false;
 
-    // Estratégia UPSERT: tenta update, se não encontrar → insert
-    // Executa em paralelo para melhor performance
-    const upsertPromises = chunks.map(async (chunk, c) => {
+    // SEQUENCIAL: evita sobrecarga do GAS com requests paralelos.
+    // O GAS processa uma requisição por vez por script — paralelos causam erros silenciosos.
+    for(let c = 0; c < chunks.length; c++) {
+      const chunk = chunks[c];
       const chunkId = sheet + '_' + c;
       const payload = { id: chunkId, chunk: c, total: chunks.length, json: JSON.stringify(chunk) };
       try {
@@ -3986,20 +3989,17 @@ async function gsSaveArray(sheet, dataArray) {
           if(!ins || ins.error) algumErro = true;
         }
       } catch(e) { algumErro = true; }
-    });
-    await Promise.all(upsertPromises);
-
-    // Remove chunks excedentes de saves anteriores (limpeza de duplicatas antigas)
-    const deletePromises = [];
-    for(let c = chunks.length; c < chunks.length + 20; c++) {
-      deletePromises.push(
-        gsDelete(sheet, sheet + '_' + c).then(del => {
-          if(!del || del.status === 'not_found') return 'stop';
-          return 'ok';
-        }).catch(() => 'stop')
-      );
     }
-    await Promise.all(deletePromises);
+
+    // Remove chunks excedentes de saves anteriores.
+    // PARA no primeiro chunk inexistente — evita disparar dezenas de DELETEs desnecessários.
+    for(let c = chunks.length; c < chunks.length + 100; c++) {
+      try {
+        const del = await gsDelete(sheet, sheet + '_' + c);
+        // GAS retorna not_found quando não existe — pode parar
+        if(!del || del.status === 'not_found') break;
+      } catch(e) { break; }
+    }
 
     gsCache[sheet] = null;
 
@@ -4077,15 +4077,27 @@ async function _doSaveMainState() {
       ...oc,
       itens: typeof oc.itens === 'string' ? oc.itens : JSON.stringify(oc.itens||[])
     }));
+
+    // SALVA EM LOTES SEQUENCIAIS (2 por vez) para não sobrecarregar o GAS.
+    // gsSaveArray já é sequencial internamente (chunk por chunk).
+    // Lote 1: produtos e movimentos (dados de estoque — maior prioridade)
     await Promise.all([
       gsSaveArray('products', products),
-      gsSaveArray('nf_history', nfSer),
       gsSaveArray('movimentos', movimentos),
+    ]);
+    // Lote 2: NFs e entregas
+    await Promise.all([
+      gsSaveArray('nf_history', nfSer),
       gsSaveArray('entregas', entregas),
+    ]);
+    // Lote 3: ordens de compra e OCs
+    await Promise.all([
       gsSaveArray('orders', ordersSer),
-      gsSaveArray('val_alerts', validadeAlerts),
       gsSaveArray('oc_list', ocsSer),
     ]);
+    // Lote 4: validades
+    await gsSaveArray('val_alerts', validadeAlerts);
+
   } catch(e) { console.warn('_doSaveMainState error:', e); }
 }
 
