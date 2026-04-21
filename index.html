@@ -4051,14 +4051,24 @@ async function gsLoadArray(sheet) {
 // Salva estado principal — uma chamada por entidade modificada
 let _saveTimer = null;
 let _savePending = false;
+let _isSavingNow = false; // true DURANTE a execução async do save (não apenas no debounce)
 let _lastMovSaveTime = 0; // timestamp of last local movimento save
 function saveMainState(immediate=false) {
   _savePending = true;
   if(_saveTimer) clearTimeout(_saveTimer);
   const delay = immediate ? 100 : 1000;
-  _saveTimer = setTimeout(() => { _savePending = false; _doSaveMainState(); }, delay);
+  _saveTimer = setTimeout(async () => {
+    _savePending = false;
+    _isSavingNow = true; // bloqueia sincronizarDados enquanto salva
+    try {
+      await _doSaveMainState();
+    } finally {
+      _isSavingNow = false; // libera somente após o GAS confirmar
+    }
+  }, delay);
 }
-window._isSavePending = () => _savePending;
+// sincronizarDados verifica este flag antes de sobrescrever dados locais
+window._isSavePending = () => _savePending || _isSavingNow;
 
 async function _doSaveMainState() {
   try {
@@ -4097,6 +4107,9 @@ async function _doSaveMainState() {
     ]);
     // Lote 4: validades
     await gsSaveArray('val_alerts', validadeAlerts);
+
+    // Registra momento em que o save concluiu — sincronizarDados usa isso para não sobrescrever
+    window._lastSaveCompleteTime = Date.now();
 
   } catch(e) { console.warn('_doSaveMainState error:', e); }
 }
@@ -7312,8 +7325,11 @@ function iniciarSincronizacao() {
 
 async function sincronizarDados() {
   if (!window.gsLoadArray || !window.currentUser) return;
-  if (window._isSavePending && window._isSavePending()) return;
+  if (window._isSavePending && window._isSavePending()) return; // bloqueia durante save em andamento
   if (window._produtosSendoSalvos) return;
+  // Nao sincroniza se houve save local nos últimos 30s — janela ampliada para saves sequenciais
+  const saveRecente = window._lastSaveCompleteTime && (Date.now() - window._lastSaveCompleteTime < 30000);
+  if (saveRecente) return;
   // CORRECAO: nao sincroniza OCs se houve save local recente (janela de 15s)
   // para evitar que o servidor retorne dados antigos e sobrescreva saves locais.
   const ocSaveRecente = window._lastOCSaveTime && (Date.now() - window._lastOCSaveTime < 15000);
