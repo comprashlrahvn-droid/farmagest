@@ -3203,7 +3203,7 @@ function gerarPedido(){
   };
   purchaseOrders.push(ordem);
   window.purchaseOrders = purchaseOrders; // mantém referência global sincronizada
-  // Backup imediato — garante persistência mesmo se GAS demorar mais que o timeout do boot
+  // BACKUP IMEDIATO no localStorage — antes de qualquer async/GAS
   try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
   // Clear pedido quantities
   itens.forEach(p=>{p.pedido=null;p.status='normal';});
@@ -3211,6 +3211,8 @@ function gerarPedido(){
   renderPedidos();
   saveMainState();
   alert(`✅ ${ordem.numero} gerada com ${itens.length} item(s)!\nAcesse "Ordens de Compra" no menu para acompanhar.`);
+  // Avisa o usuário para não atualizar a página até o save concluir
+  if(window.toast) window.toast('💾 Salvando pedido no banco de dados... Não atualize a página ainda.', 'warning');
 }
 
 function updateOrdersBadge(){
@@ -4117,14 +4119,11 @@ async function _doSaveMainState() {
     // Lote 4: validades
     await gsSaveArray('val_alerts', validadeAlerts);
 
-    // BACKUP LOCAL — garante que purchaseOrders e _ocList sobrevivem ao refresh
-    // mesmo se o GAS demorou mais que o timeout de carregamento (8s)
-    try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
-    try { localStorage.setItem('fg_oc_backup', JSON.stringify(window._ocList || [])); } catch(e){}
-    try { localStorage.setItem('fg_nf_backup', JSON.stringify(nfHistory)); } catch(e){}
-
     // Registra momento em que o save concluiu — sincronizarDados usa isso para não sobrescrever
     window._lastSaveCompleteTime = Date.now();
+    // Atualiza backups locais após save GAS confirmado
+    try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
+    try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
 
   } catch(e) { console.warn('_doSaveMainState error:', e); }
 }
@@ -4200,21 +4199,19 @@ async function loadMainState() {
       // Intersecção: mantém apenas os que passam pelos dois filtros
       const idsSobreviventes=new Set(Object.values(nfMapByNum).map(n=>n.id));
       nfHistory=Object.values(nfMapById).filter(n=>idsSobreviventes.has(n.id));
-      // Atualiza backup local
-      try { localStorage.setItem('fg_nf_backup', JSON.stringify(nfHistory)); } catch(e){}
+      try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
     } else {
-      // GAS vazio — tenta backup local
       try {
-        const localNF = JSON.parse(localStorage.getItem('fg_nf_backup') || 'null');
-        if(Array.isArray(localNF) && localNF.length > 0) {
-          console.warn('loadMainState: GAS retornou vazio para nf_history — usando backup localStorage');
-          nfHistory = localNF.map(n => {
+        const backup = JSON.parse(localStorage.getItem('fg_nfhist_backup') || 'null');
+        if(Array.isArray(backup) && backup.length > 0) {
+          nfHistory = backup.map(n => {
             if(n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
             if(typeof n.itens === 'string') { try { n.itens = JSON.parse(n.itens); } catch(e){n.itens=[];} }
             return n;
           });
+          console.warn('[NF] GAS vazio — restaurado do localStorage backup (' + nfHistory.length + ' NFs)');
         }
-      } catch(e){}
+      } catch(e) {}
     }
 
     // GAS é a fonte autoritativa para movimentos — sempre carrega se disponível
@@ -4237,28 +4234,23 @@ async function loadMainState() {
         if(typeof o.itens === 'string') { try { o.itens = JSON.parse(o.itens); } catch(e){o.itens=[];} }
         return o;
       });
-      window.purchaseOrders = purchaseOrders;
-      // Atualiza backup local
+      window.purchaseOrders = purchaseOrders; // mantém referência global sincronizada
+      // Atualiza backup local sempre que GAS tiver dados válidos
       try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
     } else {
-      // GAS vazio ou timeout — usa backup local para não perder pedidos recentes
+      // GAS retornou vazio (timeout ou ainda não salvou) — usa backup do localStorage
       try {
-        const localOrders = JSON.parse(localStorage.getItem('fg_orders_backup') || 'null');
-        if(Array.isArray(localOrders) && localOrders.length > 0) {
-          console.warn('loadMainState: GAS retornou vazio para orders — usando backup localStorage');
-          purchaseOrders = localOrders.map(o => {
+        const backup = JSON.parse(localStorage.getItem('fg_orders_backup') || 'null');
+        if(Array.isArray(backup) && backup.length > 0) {
+          purchaseOrders = backup.map(o => {
             if(o.id) o.id = isNaN(o.id) ? o.id : Number(o.id);
             if(typeof o.itens === 'string') { try { o.itens = JSON.parse(o.itens); } catch(e){o.itens=[];} }
             return o;
           });
           window.purchaseOrders = purchaseOrders;
-          // Tenta resincronizar com GAS em background após 5s
-          setTimeout(() => {
-            const ser = purchaseOrders.map(o => ({...o, itens: typeof o.itens === 'string' ? o.itens : JSON.stringify(o.itens||[])}));
-            gsSaveArray('orders', ser).catch(()=>{});
-          }, 5000);
+          console.warn('[ORDERS] GAS vazio — restaurado do localStorage backup (' + purchaseOrders.length + ' pedidos)');
         }
-      } catch(e){}
+      } catch(e) {}
     }
 
     if(Array.isArray(loadedVal) && loadedVal.length > 0) {
@@ -4270,6 +4262,7 @@ async function loadMainState() {
       const loadedOCs = await gsLoadArray('oc_list');
       if(Array.isArray(loadedOCs) && loadedOCs.length > 0) {
         const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
+        // Deduplica por NUMERO (chave de negócio), mantendo status mais avançado
         const ocMap={};
         loadedOCs.forEach(oc=>{
           const parsed={...oc,itens:typeof oc.itens==='string'?(() => { try { return JSON.parse(oc.itens); } catch(e){ return []; } })():(oc.itens||[])};
@@ -4280,25 +4273,11 @@ async function loadMainState() {
           }
         });
         window._ocList=Object.values(ocMap);
-        // Atualiza backup local
-        try { localStorage.setItem('fg_oc_backup', JSON.stringify(window._ocList)); } catch(e){}
-      } else {
-        // GAS vazio ou timeout — usa backup local
-        try {
-          const localOCs = JSON.parse(localStorage.getItem('fg_oc_backup') || 'null');
-          if(Array.isArray(localOCs) && localOCs.length > 0) {
-            console.warn('loadMainState: GAS retornou vazio para oc_list — usando backup localStorage');
-            window._ocList = localOCs.map(oc => ({
-              ...oc,
-              itens: typeof oc.itens === 'string' ? (() => { try { return JSON.parse(oc.itens); } catch(e){ return []; } })() : (oc.itens||[])
-            }));
-            // Resincroniza em background
-            setTimeout(() => {
-              const ser = window._ocList.map(oc => ({...oc, itens: JSON.stringify(oc.itens||[])}));
-              gsSaveArray('oc_list', ser).catch(()=>{});
-            }, 7000);
-          }
-        } catch(e){}
+        // Persiste já limpa para o GAS para corrigir a planilha
+        if(window.gsSaveArray && window._ocList.length>0){
+          const ocsSer=window._ocList.map(oc=>({...oc,itens:JSON.stringify(oc.itens||[])}));
+          window.gsSaveArray('oc_list',ocsSer).catch(()=>{});
+        }
       }
     } catch(e) {}
 
@@ -4711,7 +4690,7 @@ function dedupMovimentos() {
     // Carrega estado principal (products dinâmicos, NFs, estoque, etc.)
     await Promise.race([
       loadMainState(),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),20000))
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))
     ]);
   } catch(e) { /* usa dados em memória como fallback */ }
   // Remove duplicatas de NF que possam ter sido geradas por bug anterior
@@ -6533,22 +6512,13 @@ function salvarOC(oc) {
   } else {
     window._ocList.push(oc);
   }
-  // Backup imediato no localStorage — garante persistência mesmo com timeout do GAS
-  try { localStorage.setItem('fg_oc_backup', JSON.stringify(window._ocList)); } catch(e){}
-  // Serializa itens antes de salvar (igual ao _doSaveMainState)
-  const ocsSer = window._ocList.map(function(o) {
-    return Object.assign({}, o, { itens: typeof o.itens === 'string' ? o.itens : JSON.stringify(o.itens || []) });
-  });
-  // Pre-bloqueia sync por 90s para evitar race condition com GAS lento
-  window._lastOCSaveTime = Date.now() + 75000;
+  // CORRECAO: marca timestamp de save para impedir que o sync sobrescreva
+  // a lista local antes do save no GAS ser confirmado.
+  window._lastOCSaveTime = Date.now();
   if (window.gsSaveArray) {
-    Promise.resolve(window.gsSaveArray('oc_list', ocsSer))
-      .then(function() {
-        window._lastOCSaveTime = Date.now() + 30000;
-      })
-      .catch(function() {
-        window._lastOCSaveTime = Date.now() + 30000;
-      });
+    Promise.resolve(window.gsSaveArray('oc_list', window._ocList))
+      .then(function() { window._lastOCSaveTime = Date.now(); })
+      .catch(function() { window._lastOCSaveTime = Date.now(); });
   }
 }
 
@@ -7403,9 +7373,9 @@ async function sincronizarDados() {
   // Nao sincroniza se houve save local nos últimos 30s — janela ampliada para saves sequenciais
   const saveRecente = window._lastSaveCompleteTime && (Date.now() - window._lastSaveCompleteTime < 30000);
   if (saveRecente) return;
-  // CORREÇÃO DEFINITIVA: _lastOCSaveTime pode ser um timestamp futuro (pre-bloqueio).
-  // Correto: protege enquanto o timestamp estiver no futuro OU nos últimos 60s.
-  const ocSaveRecente = window._lastOCSaveTime && (window._lastOCSaveTime > Date.now() || (Date.now() - window._lastOCSaveTime < 60000));
+  // CORRECAO: nao sincroniza OCs se houve save local recente (janela de 15s)
+  // para evitar que o servidor retorne dados antigos e sobrescreva saves locais.
+  const ocSaveRecente = window._lastOCSaveTime && (Date.now() - window._lastOCSaveTime < 15000);
   try {
     await window.loadMainState();
     const ocsSalvas = await window.gsLoadArray('oc_list');
