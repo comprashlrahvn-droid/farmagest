@@ -3803,13 +3803,13 @@ function registrarNFManual(){
   // Verificação de duplicata
   const duplicatas = verificarNFDuplicada(numero, fornecedor, data);
   if(duplicatas.length){
-    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNFManual(numero, fornecedor, data, ocId));
+    _mostrarModalDuplicata(numero, fornecedor, data, duplicatas, ()=>_executarRegistroNFManual(numero, fornecedor, data, ocId, _mnfOcIds));
     return;
   }
-  _executarRegistroNFManual(numero, fornecedor, data, ocId);
+  _executarRegistroNFManual(numero, fornecedor, data, ocId, _mnfOcIds);
 }
 
-function _executarRegistroNFManual(numero, fornecedor, data, ocId){
+function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
   const valor = document.getElementById('mnf-valor').value.trim();
   const chave = document.getElementById('mnf-chave').value.trim();
   nfManualItens.forEach(it=>{
@@ -3861,7 +3861,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId){
   </div>`;
 
   // Vincula NF apenas à OC selecionada
-  _mnfOcIds.forEach(id => linkNFToSpecificOC(nfManualItens, id));
+  (ocIds || []).forEach(id => linkNFToSpecificOC(nfManualItens, id));
 
   nfManualItens = [];
   renderManualItens();
@@ -4099,23 +4099,17 @@ async function _doSaveMainState() {
       itens: typeof oc.itens === 'string' ? oc.itens : JSON.stringify(oc.itens||[])
     }));
 
-    // SALVA EM LOTES SEQUENCIAIS (2 por vez) para não sobrecarregar o GAS.
-    // gsSaveArray já é sequencial internamente (chunk por chunk).
+    // SALVA SEQUENCIALMENTE — o GAS processa uma requisição por vez por script.
+    // Promise.all paralelo causa erros silenciosos no GAS.
     // Lote 1: produtos e movimentos (dados de estoque — maior prioridade)
-    await Promise.all([
-      gsSaveArray('products', products),
-      gsSaveArray('movimentos', movimentos),
-    ]);
+    await gsSaveArray('products', products);
+    await gsSaveArray('movimentos', movimentos);
     // Lote 2: NFs e entregas
-    await Promise.all([
-      gsSaveArray('nf_history', nfSer),
-      gsSaveArray('entregas', entregas),
-    ]);
+    await gsSaveArray('nf_history', nfSer);
+    await gsSaveArray('entregas', entregas);
     // Lote 3: ordens de compra e OCs
-    await Promise.all([
-      gsSaveArray('orders', ordersSer),
-      gsSaveArray('oc_list', ocsSer),
-    ]);
+    await gsSaveArray('orders', ordersSer);
+    await gsSaveArray('oc_list', ocsSer);
     // Lote 4: validades
     await gsSaveArray('val_alerts', validadeAlerts);
 
@@ -4130,21 +4124,15 @@ async function _doSaveMainState() {
 
 async function loadMainState() {
   try {
-    const [
-      loadedProducts,
-      loadedNF,
-      loadedMov,
-      loadedEntregas,
-      loadedOrders,
-      loadedVal
-    ] = await Promise.all([
-      gsLoadArray('products'),
-      gsLoadArray('nf_history'),
-      gsLoadArray('movimentos'),
-      gsLoadArray('entregas'),
-      gsLoadArray('orders'),
-      gsLoadArray('val_alerts'),
-    ]);
+    // CARREGA SEQUENCIALMENTE — o GAS nao suporta multiplas requisicoes paralelas.
+    // Promise.all paralelo causava falhas silenciosas onde algumas abas retornavam null,
+    // fazendo o app cair no fallback do localStorage (vazio em outro computador).
+    const loadedProducts = await gsLoadArray('products');
+    const loadedNF       = await gsLoadArray('nf_history');
+    const loadedMov      = await gsLoadArray('movimentos');
+    const loadedEntregas = await gsLoadArray('entregas');
+    const loadedOrders   = await gsLoadArray('orders');
+    const loadedVal      = await gsLoadArray('val_alerts');
 
     if(Array.isArray(loadedProducts) && loadedProducts.length > 0) {
       // GS é a fonte autoritativa — corrige tipos e usa diretamente
