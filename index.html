@@ -4291,15 +4291,49 @@ const LOCAL_USERS = [
   {id:'local_user',name:'Usuário Padrão',email:'farmacia@ahvn.com',password:'farmacia123',role:'user',status:'approved',isCreator:'false'}
 ];
 
+// ── CORRECAO CRITICA: o GAS armazena dados do usuario DENTRO da coluna "json". ──
+// getAllRows() retorna {id, json, chunk, total, timestamp} — os campos reais
+// (name, email, password, role, status) ficam em row.json e precisam ser parseados.
+// Sem isso, x.email === undefined em todo o codigo de auth e renderizacao.
+function _parseUserRow(row) {
+  if (!row) return row;
+  if (row.email || row.name) return row; // LOCAL_USERS ja tem campos no topo
+  if (row.json) {
+    try {
+      const parsed = JSON.parse(row.json);
+      return { ...parsed, id: row.id }; // id da linha e sempre autoritativo
+    } catch(e) {}
+  }
+  return row;
+}
+
+// Atualiza usuario lendo json atual, fazendo merge e gravando de volta.
+// gsUpdate so sabe atualizar a coluna "json" — passar {status:'approved'}
+// diretamente nao funciona; o campo fica dentro do json serializado.
+async function _updateUser(id, updates) {
+  const rows = await gsGetAll('usuarios', true);
+  const row = rows.find(r => String(r.id) === String(id));
+  if (!row) return { status: 'not_found' };
+  const current = _parseUserRow(row);
+  const { chunk, total, timestamp, json: _j, ...userData } = current;
+  const merged = { ...userData, ...updates };
+  const res = await gsUpdate('usuarios', id, { json: JSON.stringify(merged) });
+  gsCache['usuarios'] = null;
+  return res;
+}
+
 async function getAllUsers(force=true) {
   try {
     // force=true garante que sempre busca do servidor no login,
-    // evitando que o cache antigo bloqueie usuários recém-aprovados
+    // evitando que o cache antigo bloqueie usuarios recem-aprovados
     const remote = await Promise.race([
       gsGetAll('usuarios', force),
       new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 7000))
     ]);
-    if(Array.isArray(remote) && remote.length > 0) return remote;
+    if(Array.isArray(remote) && remote.length > 0) {
+      // CORRECAO: parse do campo "json" de cada linha para expor name, email, etc.
+      return remote.map(_parseUserRow).filter(u => u.id);
+    }
   } catch(e) { console.warn('getAllUsers fallback local:', e.message); }
   return LOCAL_USERS;
 }
@@ -4381,7 +4415,8 @@ async function doRegister() {
       gsGetAll('usuarios',true),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000))
     ]);
-    if(Array.isArray(users) && users.find(x=>x.email===email)){
+    const parsedUsers = Array.isArray(users) ? users.map(_parseUserRow) : [];
+    if(parsedUsers.find(x=>String(x.email||'').trim().toLowerCase()===email.toLowerCase())){
       hideLoading();errEl.textContent='E-mail já cadastrado.';errEl.style.display='block';return;
     }
   } catch(e) { /* continua mesmo sem verificar duplicatas */ }
@@ -5247,20 +5282,21 @@ async function renderUsuarios() {
 
 async function aprovarUsuario(id){
   showLoading('Aprovando...');
-  const res = await gsUpdate('usuarios', id, {status:'approved'});
-  gsCache['usuarios'] = null; // força recarregamento no próximo login
+  // CORRECAO: usa _updateUser para ler o json atual, fazer merge e gravar de volta.
+  // gsUpdate direto com {status:'approved'} nao funciona — o GAS so atualiza
+  // a coluna "json" quando data.json esta presente; campos extras sao ignorados.
+  const res = await _updateUser(id, {status:'approved'});
   hideLoading();
-  if(res && res.status === 'updated'){
+  if(res && (res.status === 'ok' || res.status === 'updated')){
     toast('✅ Usuário aprovado! Ele já pode fazer login.', 'success');
   } else {
-    toast('⚠️ Aprovação enviada, mas verifique a planilha.', 'warning');
+    toast('⚠️ Erro ao aprovar. Tente novamente.', 'warning');
   }
   renderUsuarios();
 }
 async function revogarUsuario(id){
   showLoading('Revogando...');
-  await gsUpdate('usuarios', id, {status:'pending'});
-  gsCache['usuarios'] = null;
+  await _updateUser(id, {status:'pending'});
   hideLoading();
   toast('🔒 Acesso revogado.', 'warning');
   renderUsuarios();
@@ -5650,9 +5686,8 @@ async function salvarPerfil(){
 
   showLoading('Salvando perfil...');
   try {
-    // Atualiza no Google Sheets
-    await gsUpdate('usuarios', currentUser.id, updates);
-    gsCache['usuarios'] = null;
+    // Atualiza no Google Sheets via _updateUser (faz merge correto do json)
+    await _updateUser(currentUser.id, updates);
     // Atualiza currentUser em memória
     currentUser.name = nome;
     if(senha) currentUser.password = senha;
