@@ -3972,9 +3972,9 @@ async function gsDelete(sheet, id) {
 // CHUNK_SIZE pequeno evita estouro do limite de 50KB por célula do Google Sheets
 async function gsSaveArray(sheet, dataArray) {
   try {
-    // CRÍTICO: 10 itens por chunk (~3KB) — seguro mesmo para objetos grandes (NFs, OCs)
-    // NÃO aumentar sem testar: cada célula do Google Sheets suporta até 50KB de texto
-    const chunkSize = 10;
+    // CRÍTICO: 3 itens por chunk — URL menor, evita limite de URL do GAS/browser
+    // NFs com muitos itens ou produtos com dados grandes podem exceder 8KB de URL com chunkSize>3
+    const chunkSize = 3;
     gsCache[sheet] = null;
 
     const chunks = [];
@@ -4083,10 +4083,23 @@ window._isSavePending = () => _savePending || _isSavingNow;
 
 async function _doSaveMainState() {
   try {
-    // Serializa campos aninhados antes de enviar ao GAS
+    // Serializa NFs — CRÍTICO: strip de objetos "matched" completos antes de salvar
+    // matched guarda cópia do produto inteiro, inflando demais o JSON (causa URL overflow no GAS)
     const nfSer = nfHistory.map(n => ({
       ...n,
-      itens: typeof n.itens === 'string' ? n.itens : JSON.stringify(n.itens||[]),
+      itens: typeof n.itens === 'string' ? n.itens : JSON.stringify((n.itens||[]).map(it=>({
+        descricao: it.descricao,
+        cod_prod: it.cod_prod,
+        quantidade: it.quantidade,
+        fator: it.fator,
+        valor_unitario: it.valor_unitario,
+        validade: it.validade,
+        lote: it.lote,
+        qty_unidades_final: it.qty_unidades_final,
+        qty_unidades: it.qty_unidades,
+        // matched: só salva o id do produto (não o objeto inteiro)
+        matched: (it.matched||[]).map(m=>({id:m.id}))
+      }))),
       suspensao: n.suspensao ? (typeof n.suspensao === 'string' ? n.suspensao : JSON.stringify(n.suspensao)) : ''
     }));
     const ordersSer = purchaseOrders.map(o => ({
@@ -4174,6 +4187,20 @@ async function loadMainState() {
         if(n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
         if(typeof n.itens === 'string') { try { n.itens = JSON.parse(n.itens); } catch(e){n.itens=[];} }
         if(typeof n.suspensao === 'string' && n.suspensao) { try { n.suspensao = JSON.parse(n.suspensao); } catch(e){} }
+        // Reconstrói matched: apenas {id} foi salvo, precisa relinkar ao produto real
+        if(Array.isArray(n.itens)) {
+          n.itens.forEach(it => {
+            if(Array.isArray(it.matched)) {
+              it.matched = it.matched.map(m => {
+                // Se já é objeto completo (tem material), retorna direto
+                if(m.material) return m;
+                // Reconstrói a partir do products array pelo id
+                const prod = products.find(p => p.id == m.id);
+                return prod ? {...prod} : m;
+              }).filter(Boolean);
+            }
+          });
+        }
         // Dedup por id
         const exId=nfMapById[n.id];
         if(!exId||(sfPrio[n.status]||0)>=(sfPrio[exId.status]||0)) nfMapById[n.id]=n;
@@ -4307,6 +4334,22 @@ function _parseUserRow(row) {
   return row;
 }
 
+// ── PARSE GENÉRICO DE ROW DO GAS ─────────────────────────────────────────────
+// Idêntico ao _parseUserRow mas para qualquer entidade (fornecedores, conf_entregas etc.)
+// Dados ficam serializados dentro da coluna "json" e precisam ser extraídos ao ler.
+function _parseGASRow(row) {
+  if (!row) return row;
+  // Se já tem campos de negócio diretamente (ex: dados já parseados ou LOCAL_USERS), retorna direto
+  if (row.name || row.email || row.resultado || row.supplierName || row.nf || row.status) return row;
+  if (row.json) {
+    try {
+      const parsed = JSON.parse(row.json);
+      return { ...parsed, id: row.id || parsed.id };
+    } catch(e) {}
+  }
+  return row;
+}
+
 // Atualiza usuario lendo json atual, fazendo merge e gravando de volta.
 // gsUpdate so sabe atualizar a coluna "json" — passar {status:'approved'}
 // diretamente nao funciona; o campo fica dentro do json serializado.
@@ -4421,12 +4464,16 @@ async function doRegister() {
     }
   } catch(e) { /* continua mesmo sem verificar duplicatas */ }
   const newUser = {id:'u_'+Date.now(),name,email,password:pass,role,status:'pending',isCreator:'false'};
+  // CRÍTICO: gsInsert precisa receber o objeto com json serializado para o GAS armazenar corretamente
   const result = await gsInsert('usuarios', newUser);
   gsCache['usuarios']=null;
   hideLoading();
-  if(result && !result.error) {
+  if(result && result.status === 'ok') {
     errEl.style.cssText='display:block;background:rgba(0,212,170,0.1);border-color:rgba(0,212,170,0.3);color:var(--accent);';
     errEl.textContent='✅ Cadastro solicitado! Aguarde aprovação do administrador.';
+  } else if(result && result.error) {
+    errEl.style.cssText='display:block;';
+    errEl.textContent='❌ Erro ao salvar cadastro: ' + result.error + '. Tente novamente.';
   } else {
     errEl.style.cssText='display:block;background:rgba(0,212,170,0.1);border-color:rgba(0,212,170,0.3);color:var(--accent);';
     errEl.textContent='✅ Cadastro enviado! Aguarde aprovação do administrador.';
@@ -4748,10 +4795,14 @@ let _conferencias = []; // local store for delivery confirmations
 window._fornecedores = _fornecedores; // expõe para o patch OC
 
 async function loadFornecedoresData() {
-  _fornecedores = await gsGetAll('fornecedores', true);
-  window._fornecedores = _fornecedores; // mantém sincronizado
-  _conferencias = await gsGetAll('conf_entregas', true);
+  const rawForn = await gsGetAll('fornecedores', true);
+  _fornecedores = Array.isArray(rawForn) ? rawForn.map(_parseGASRow) : [];
+  window._fornecedores = _fornecedores;
+  const rawConf = await gsGetAll('conf_entregas', true);
+  _conferencias = Array.isArray(rawConf) ? rawConf.map(_parseGASRow) : [];
 }
+
+// Parse genérico de row do GAS: campos reais podem estar dentro de .json (string serializada)
 
 function salvarFornecedor() {
   const name=document.getElementById('sup-name').value.trim();
@@ -4768,11 +4819,16 @@ function salvarFornecedor() {
     ratingPrazo:document.getElementById('sup-rat-prazo').value,
   };
   showLoading('Cadastrando fornecedor...');
-  gsInsert('fornecedores',row).then(()=>{
-    gsCache['fornecedores']=null; window._fornecedores=[];
-    _fornecedores=[];
+  // CRÍTICO: gsInsert armazena dados dentro da coluna "json" no GAS
+  // Passamos o objeto completo; o GAS serializa como json string na célula
+  gsInsert('fornecedores', row).then(res=>{
+    gsCache['fornecedores']=null; window._fornecedores=[]; _fornecedores=[];
     hideLoading();
-    toast('✅ Fornecedor cadastrado!');
+    if(res && !res.error) {
+      toast('✅ Fornecedor cadastrado!');
+    } else {
+      toast('✅ Fornecedor salvo! (verifique conexão com banco)');
+    }
     renderFornecedoresRanking();
     renderFornecedoresList();
     populateSupplierSelects();
@@ -4787,7 +4843,8 @@ function salvarFornecedor() {
 
 async function renderFornecedoresRanking() {
   if(!_fornecedores.length) await loadFornecedoresData();
-  const confs = _conferencias.length ? _conferencias : await gsGetAll('conf_entregas',true);
+  const rawConfs = _conferencias.length ? _conferencias : await gsGetAll('conf_entregas',true);
+  const confs = Array.isArray(rawConfs) ? rawConfs.map(_parseGASRow) : [];
 
   // Stats
   const total=confs.length;
@@ -4890,13 +4947,23 @@ async function salvarEdicaoFornecedor() {
   const email=document.getElementById('edit-sup-email').value.trim();
   if(!name||!email){toast('Informe nome e e-mail.');return;}
   showLoading('Salvando...');
-  await gsUpdate('fornecedores',id,{name,email,phone:document.getElementById('edit-sup-phone').value,
-    cnpj:document.getElementById('edit-sup-cnpj').value.trim(),
-    contato:document.getElementById('edit-sup-contato')?.value.trim()||'',
-    ratingAtend:document.getElementById('edit-rat-atend').value,
-    ratingFin:document.getElementById('edit-rat-fin').value,
-    ratingQual:document.getElementById('edit-rat-qual').value,
-    ratingPrazo:document.getElementById('edit-rat-prazo').value});
+  // CRÍTICO: gsUpdate só atualiza a coluna "json". É preciso ler o registro atual,
+  // fazer merge e gravar o json completo — igual ao padrão _updateUser para usuários.
+  const rows = await gsGetAll('fornecedores', true);
+  const row = rows.find(r => String(r.id) === String(id));
+  const current = row ? _parseGASRow(row) : {};
+  const merged = {
+    ...current,
+    name, email,
+    phone: document.getElementById('edit-sup-phone').value,
+    cnpj: document.getElementById('edit-sup-cnpj').value.trim(),
+    contato: document.getElementById('edit-sup-contato')?.value.trim()||'',
+    ratingAtend: document.getElementById('edit-rat-atend').value,
+    ratingFin: document.getElementById('edit-rat-fin').value,
+    ratingQual: document.getElementById('edit-rat-qual').value,
+    ratingPrazo: document.getElementById('edit-rat-prazo').value
+  };
+  await gsUpdate('fornecedores', id, { json: JSON.stringify(merged) });
   gsCache['fornecedores']=null; _fornecedores=[]; window._fornecedores=[];
   hideLoading(); closeModal('modal-edit-sup'); toast('✅ Fornecedor atualizado!');
   renderFornecedoresRanking(); renderFornecedoresList(); populateSupplierSelects();
@@ -4912,7 +4979,8 @@ async function excluirFornecedor(id) {
 }
 
 async function renderQualDivergencias() {
-  const confs=await gsGetAll('conf_entregas',true);
+  const rawConfs=await gsGetAll('conf_entregas',true);
+  const confs=Array.isArray(rawConfs)?rawConfs.map(_parseGASRow):[];
   const divs=confs.filter(c=>c.resultado==='divergente');
   const el=document.getElementById('qual-divergencias-body');
   if(!el) return;
@@ -4936,7 +5004,7 @@ async function renderQualDivergencias() {
 }
 
 async function abrirDivergencia(id) {
-  const confs=await gsGetAll('conf_entregas');
+  const _rawConfs_=await gsGetAll('conf_entregas'); const confs=_rawConfs_.map(_parseGASRow);
   const d=confs.find(x=>x.id===id);
   if(!d) return;
   document.getElementById('div-conf-id').value=id;
@@ -4958,12 +5026,14 @@ async function salvarComentarioDiv() {
   const id=document.getElementById('div-conf-id').value;
   const comment=document.getElementById('div-comment').value.trim();
   if(!comment){toast('Digite um comentário.');return;}
-  const confs=await gsGetAll('conf_entregas');
+  const _rawConfs_=await gsGetAll('conf_entregas',true); const confs=_rawConfs_.map(_parseGASRow);
   const d=confs.find(x=>x.id===id);
-  const hist=d&&d.divHistory?JSON.parse(d.divHistory):[];
+  const hist=d&&d.divHistory?(typeof d.divHistory==='string'?JSON.parse(d.divHistory):d.divHistory):[];
   hist.push({user:currentUser?.name||'Sistema',date:new Date().toLocaleDateString('pt-BR'),comment});
   showLoading('Salvando...');
-  await gsUpdate('conf_entregas',id,{divHistory:JSON.stringify(hist),divComment:comment});
+  // CRÍTICO: gsUpdate só atualiza coluna json — precisa serializar o objeto completo
+  const merged={...d,divHistory:JSON.stringify(hist),divComment:comment};
+  await gsUpdate('conf_entregas',id,{json:JSON.stringify(merged)});
   gsCache['conf_entregas']=null; _conferencias=[];
   hideLoading(); toast('💬 Comentário salvo!'); closeModal('modal-divergencia'); renderQualDivergencias();
 }
@@ -4972,13 +5042,14 @@ async function marcarDivSolucionada() {
   const id=document.getElementById('div-conf-id').value;
   const comment=document.getElementById('div-comment').value.trim();
   if(!confirm('Marcar como solucionada?')) return;
-  const confs=await gsGetAll('conf_entregas');
+  const _rawConfs_=await gsGetAll('conf_entregas',true); const confs=_rawConfs_.map(_parseGASRow);
   const d=confs.find(x=>x.id===id);
-  const hist=d&&d.divHistory?JSON.parse(d.divHistory):[];
+  const hist=d&&d.divHistory?(typeof d.divHistory==='string'?JSON.parse(d.divHistory):d.divHistory):[];
   if(comment) hist.push({user:currentUser?.name||'Sistema',date:new Date().toLocaleDateString('pt-BR'),comment});
   hist.push({user:currentUser?.name||'Sistema',date:new Date().toLocaleDateString('pt-BR'),comment:'✅ Divergência marcada como SOLUCIONADA.'});
   showLoading('Salvando...');
-  await gsUpdate('conf_entregas',id,{divStatus:'solved',divHistory:JSON.stringify(hist),divComment:'✅ Solucionada',divSolvedAt:new Date().toISOString()});
+  const merged={...d,divStatus:'solved',divHistory:JSON.stringify(hist),divComment:'✅ Solucionada',divSolvedAt:new Date().toISOString()};
+  await gsUpdate('conf_entregas',id,{json:JSON.stringify(merged)});
   gsCache['conf_entregas']=null; _conferencias=[];
   hideLoading(); toast('✅ Divergência solucionada!'); closeModal('modal-divergencia'); renderQualDivergencias();
 }
@@ -4988,7 +5059,7 @@ let _confFiles = [];
 let _preCadastros = [];
 
 async function populateSupplierSelects() {
-  const sups=await gsGetAll('fornecedores');
+  const _rawSups=await gsGetAll('fornecedores'); const sups=_rawSups.map(_parseGASRow);
   const sorted=[...(sups||[])].sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
   ['conf-supplier','pre-supplier'].forEach(id=>{
     const sel=document.getElementById(id);
@@ -5028,7 +5099,7 @@ function renderConfFileList() {
 }
 
 async function loadConfPendingNFs() {
-  _preCadastros = await gsGetAll('pre_entregas', true);
+  _rawPre_=await gsGetAll('pre_entregas',true); _preCadastros=_rawPre_.map(_parseGASRow);
   const pending=_preCadastros.filter(p=>p.status==='pendente');
   const area=document.getElementById('conf-pending-nfs');
   if(!area) return;
@@ -5072,7 +5143,7 @@ async function submitConferencia() {
   if(!suppId||!nf||!dateRecv||!volumes){toast('Preencha todos os campos obrigatórios.');return;}
   if(!resultado){toast('Selecione se a entrega foi Conforme ou Divergente.');return;}
 
-  const sups=await gsGetAll('fornecedores');
+  const _rawSups=await gsGetAll('fornecedores'); const sups=_rawSups.map(_parseGASRow);
   const sup=sups.find(s=>s.id===suppId);
 
   // Build divergence description summary
@@ -5114,9 +5185,12 @@ async function submitConferencia() {
   await gsInsert('conf_entregas',entry);
   gsCache['conf_entregas']=null; _conferencias=[];
 
-  // Mark pre-order as received
+  // Mark pre-order as received using json merge pattern
   if(preId){
-    await gsUpdate('pre_entregas',preId,{status:'recebido'});
+    const _rawPres_=await gsGetAll('pre_entregas',true);
+    const _pre_=(_rawPres_.map(_parseGASRow)).find(p=>String(p.id)===String(preId));
+    const _preMerged_={...(_pre_||{id:preId}),status:'recebido'};
+    await gsUpdate('pre_entregas',preId,{json:JSON.stringify(_preMerged_)});
     gsCache['pre_entregas']=null; _preCadastros=[];
   }
   hideLoading();
@@ -5158,7 +5232,8 @@ function resetConfForm() {
 }
 
 async function renderConfHistorico() {
-  const data=await gsGetAll('conf_entregas',true);
+  const rawData=await gsGetAll('conf_entregas',true);
+  const data=Array.isArray(rawData)?rawData.map(_parseGASRow):[];
   const q=(document.getElementById('search-conf-hist')?.value||'').toLowerCase();
   const rf=(document.getElementById('filter-conf-resultado')?.value||'');
   const filtered=data.filter(c=>{
@@ -5188,7 +5263,7 @@ async function salvarPreCadastro() {
   const dateExpected=document.getElementById('pre-date-expected').value;
   const notes=document.getElementById('pre-notes').value.trim();
   if(!suppId||!nf||!dateBilling){toast('Informe fornecedor, NF e data de faturamento.');return;}
-  const sups=await gsGetAll('fornecedores');
+  const _rawSups=await gsGetAll('fornecedores'); const sups=_rawSups.map(_parseGASRow);
   const sup=sups.find(s=>s.id===suppId);
   showLoading('Cadastrando...');
   await gsInsert('pre_entregas',{id:'pre_'+Date.now(),supplierId:suppId,supplierName:sup?.name||'',nf,dateBilling,dateExpected,notes,status:'pendente',createdBy:currentUser?.name||'',timestamp:new Date().toISOString()});
@@ -5203,7 +5278,7 @@ async function salvarPreCadastro() {
 }
 
 async function renderPreCadastrosList() {
-  _preCadastros=await gsGetAll('pre_entregas',true);
+  _rawPre2_=await gsGetAll('pre_entregas',true); _preCadastros=_rawPre2_.map(_parseGASRow);
   const today=new Date(); today.setHours(0,0,0,0);
   const countEl=document.getElementById('pre-count');
   if(countEl) countEl.textContent=`${_preCadastros.length} pré-cadastros`;
@@ -5266,7 +5341,7 @@ async function renderUsuarios() {
     thead.innerHTML='<th>Nome</th><th>E-mail</th><th>Senha</th><th>Perfil</th><th>Status</th><th>Ações</th>';
   }
 
-  tbody.innerHTML=allUsers.map(u=>`<tr>
+  tbody.innerHTML=allUsers.map(_parseUserRow).filter(u=>u&&u.id).map(u=>`<tr>
     <td><b>${u.name||'—'}</b>${u.email===MASTER_EMAIL?'<span class="badge badge-red" style="margin-left:6px">👑 Master</span>':''}</td>
     <td class="dim">${u.email||'—'}</td>
     <td><code style="background:var(--surface3);padding:2px 7px;border-radius:5px;font-size:0.8rem;color:var(--accent);letter-spacing:0.04em">${u.password||'—'}</code></td>
@@ -5399,14 +5474,15 @@ async function _penalizarFornecedorDivergencia(fornecedorNome, numProblemas){
     if(!_fornecedores.length) await loadFornecedoresData();
     const sup = _fornecedores.find(s=>(s.name||'').toLowerCase()===fornecedorNome.toLowerCase());
     if(!sup) return;
-    // Penaliza qualidade e prazo proporcionalmente ao número de problemas
-    const penalidade = Math.min(numProblemas * 0.5, 2); // max -2 pts por ocorrência
+    const penalidade = Math.min(numProblemas * 0.5, 2);
     const novaQual = Math.max(0, parseFloat(sup.ratingQual||5) - penalidade).toFixed(1);
     const novaPrazo = Math.max(0, parseFloat(sup.ratingPrazo||5) - penalidade*0.5).toFixed(1);
-    await gsUpdate('fornecedores', sup.id, {
-      ratingQual: novaQual,
-      ratingPrazo: novaPrazo
-    });
+    // CRÍTICO: usa padrão read-merge-write (só gsUpdate com json serializado funciona no GAS)
+    const rows = await gsGetAll('fornecedores', true);
+    const row = rows.find(r => String(r.id) === String(sup.id));
+    const current = row ? _parseGASRow(row) : sup;
+    const merged = { ...current, ratingQual: novaQual, ratingPrazo: novaPrazo };
+    await gsUpdate('fornecedores', sup.id, { json: JSON.stringify(merged) });
     gsCache['fornecedores']=null; _fornecedores=[]; window._fornecedores=[];
     console.log(`Fornecedor ${fornecedorNome} penalizado: Qual ${novaQual}, Prazo ${novaPrazo}`);
   } catch(e){ console.warn('Penalização fornecedor falhou:', e); }
