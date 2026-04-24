@@ -3900,7 +3900,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbyJkgbTKdjRRlbxibUYaLUAyz2dwXHiPDKJwsZNKkyEKEYnLndiixT0aHsZx2x6bwyt/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbzHHz0Bux6XYoyzkYKyHiOOWy-HG5iLn7eRXnq4KCV0rO78zsVEOxdFC3NGxAa1T12j/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -3947,24 +3947,29 @@ async function gsGetAll(sheet, force=false) {
 }
 // CORREÇÃO CRÍTICA: GAS redireciona POST cross-origin para GET (302 redirect),
 // perdendo o body da requisição. Solução: usar GET com dados na URL.
-// GAS web apps sempre processam GET diretamente, sem redirect.
+// Para reduzir tamanho da URL, dados são codificados em base64 (1.33x) em vez de
+// encodeURIComponent (até 3x) — NFs com muitos itens cabem dentro do limite de 8KB.
 async function gsInsert(sheet, data) {
   try {
+    const json = JSON.stringify(data);
     const url = GS_API
       + '?action=insert'
       + '&sheet=' + encodeURIComponent(sheet)
-      + '&data='  + encodeURIComponent(JSON.stringify(data));
+      + '&data='  + _toB64(json)
+      + '&enc=b64';
     const r = await fetch(url);
     return await r.json();
   } catch(e) { return null; }
 }
 async function gsUpdate(sheet, id, data) {
   try {
+    const json = JSON.stringify(data);
     const url = GS_API
       + '?action=update'
       + '&sheet=' + encodeURIComponent(sheet)
       + '&id='   + encodeURIComponent(String(id))
-      + '&data=' + encodeURIComponent(JSON.stringify(data));
+      + '&data=' + _toB64(json)
+      + '&enc=b64';
     const r = await fetch(url);
     return await r.json();
   } catch(e) { return null; }
@@ -4130,54 +4135,110 @@ window._isSavePending = () => _isSavingNow || _pendingSaves.nfs.size > 0;
 
 // ── Serializa NF para o GAS (strip de matched completo, só id) ───────────────
 function _serializeNF(nf) {
+  const itensMin = (Array.isArray(nf.itens) ? nf.itens :
+    (typeof nf.itens==='string' ? (() => { try { return JSON.parse(nf.itens); } catch(e){ return []; } })() : [])
+  ).map(it=>({
+    d: it.descricao,        // descricao
+    c: it.cod_prod,         // cod_prod
+    q: it.quantidade,       // quantidade
+    f: it.fator,            // fator
+    v: it.valor_unitario,   // valor_unitario
+    vl: it.validade,        // validade
+    l: it.lote,             // lote
+    qf: it.qty_unidades_final,
+    qu: it.qty_unidades,
+    m: (it.matched||[]).map(m=>m.id)  // só array de ids
+  }));
   return {
     ...nf,
-    itens: JSON.stringify((Array.isArray(nf.itens) ? nf.itens : (typeof nf.itens==='string' ? JSON.parse(nf.itens) : [])).map(it=>({
-      descricao: it.descricao,
-      cod_prod: it.cod_prod,
-      quantidade: it.quantidade,
-      fator: it.fator,
-      valor_unitario: it.valor_unitario,
-      validade: it.validade,
-      lote: it.lote,
-      qty_unidades_final: it.qty_unidades_final,
-      qty_unidades: it.qty_unidades,
-      matched: (it.matched||[]).map(m=>({id:m.id})) // só o id, não o objeto inteiro
-    }))),
-    suspensao: nf.suspensao ? (typeof nf.suspensao==='string' ? nf.suspensao : JSON.stringify(nf.suspensao)) : ''
+    itens: JSON.stringify(itensMin),
+    suspensao: nf.suspensao
+      ? (typeof nf.suspensao==='string' ? nf.suspensao : JSON.stringify(nf.suspensao))
+      : ''
   };
+}
+
+// ── Deserializa NF após carregar do GAS (expande campos comprimidos) ──────────
+function _deserializeNF(n) {
+  if (!n) return n;
+  if (typeof n.itens === 'string') {
+    try {
+      const arr = JSON.parse(n.itens);
+      // Detecta formato comprimido (chave 'd' = descricao)
+      if (arr.length > 0 && arr[0].d !== undefined) {
+        n.itens = arr.map(it => ({
+          descricao: it.d,
+          cod_prod: it.c,
+          quantidade: it.q,
+          fator: it.f,
+          valor_unitario: it.v,
+          validade: it.vl,
+          lote: it.l,
+          qty_unidades_final: it.qf,
+          qty_unidades: it.qu,
+          matched: (it.m||[]).map(id => {
+            const p = products.find(x => x.id == id);
+            return p ? {...p} : {id};
+          })
+        }));
+      } else {
+        // Formato antigo (campos completos)
+        n.itens = arr.map(it => ({
+          ...it,
+          matched: (it.matched||[]).map(m => {
+            if (m && m.material) return m;
+            const p = products.find(x => x.id == (m.id||m));
+            return p ? {...p} : (m.id ? m : {id: m});
+          })
+        }));
+      }
+    } catch(e) { n.itens = []; }
+  }
+  if (typeof n.suspensao === 'string' && n.suspensao) {
+    try { n.suspensao = JSON.parse(n.suspensao); } catch(e) {}
+  }
+  if (n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
+  return n;
+}
+
+// ── Codifica dado como base64 URL-safe para enviar na URL do GAS ──────────────
+// Base64 é ~1.33x o original vs encodeURIComponent que é até 3x — URLs menores
+function _toB64(str) {
+  try { return btoa(unescape(encodeURIComponent(str))); }
+  catch(e) { return encodeURIComponent(str); }
 }
 
 // ── Salva UMA NF nova no GAS (gsInsert = 1 requisição) ───────────────────────
 async function _saveNFDirect(nf) {
+  // CRÍTICO: salva no localStorage IMEDIATAMENTE, independente do GAS
+  // Isso garante que mesmo se o GAS falhar, a NF persiste no computador atual
+  try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
   try {
     const ser = _serializeNF(nf);
     const res = await gsInsert('nf_history', ser);
     if (res && res.status === 'ok') {
       _pendingSaves.nfs.delete(String(nf.id));
-      try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
       console.log('✅ NF salva no GAS:', nf.numero);
     } else {
       _pendingSaves.nfs.set(String(nf.id), nf);
-      console.warn('⚠️ NF não salva no GAS, ficou na fila:', res);
+      console.warn('⚠️ NF não salva no GAS (ficou na fila, será reenvada):', res);
     }
   } catch(e) {
     _pendingSaves.nfs.set(String(nf.id), nf);
-    console.warn('⚠️ Erro ao salvar NF, ficou na fila:', e);
+    console.warn('⚠️ Erro ao salvar NF (ficou na fila):', e);
   }
 }
 
 // ── Atualiza UMA NF existente no GAS (gsUpdate = 1 requisição) ───────────────
 async function _updateNFDirect(nf) {
+  // Salva localStorage imediatamente
+  try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
   try {
     const ser = _serializeNF(nf);
-    const merged = { json: JSON.stringify(ser) };
-    const res = await gsUpdate('nf_history', nf.id, merged);
+    const res = await gsUpdate('nf_history', nf.id, { json: JSON.stringify(ser) });
     if (res && res.status === 'ok') {
-      try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
       console.log('✅ NF atualizada no GAS:', nf.numero, 'status:', nf.status);
     } else if (res && res.status === 'not_found') {
-      // Nunca foi inserida — insere agora
       console.warn('NF não encontrada no GAS, inserindo...', nf.id);
       await _saveNFDirect(nf);
     } else {
@@ -4357,25 +4418,8 @@ async function loadMainState() {
       const sfPrio={entregue:3,suspensa:2,faturado:1};
       const nfMapById={};
       const nfMapByNum={};
-      // CRÍTICO: parseia o campo json de cada row — _saveNFDirect salva uma linha por NF
-      loadedNF.map(_parseGASRow).forEach(n=>{
-        if(n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
-        if(typeof n.itens === 'string') { try { n.itens = JSON.parse(n.itens); } catch(e){n.itens=[];} }
-        if(typeof n.suspensao === 'string' && n.suspensao) { try { n.suspensao = JSON.parse(n.suspensao); } catch(e){} }
-        // Reconstrói matched: apenas {id} foi salvo, precisa relinkar ao produto real
-        if(Array.isArray(n.itens)) {
-          n.itens.forEach(it => {
-            if(Array.isArray(it.matched)) {
-              it.matched = it.matched.map(m => {
-                // Se já é objeto completo (tem material), retorna direto
-                if(m.material) return m;
-                // Reconstrói a partir do products array pelo id
-                const prod = products.find(p => p.id == m.id);
-                return prod ? {...prod} : m;
-              }).filter(Boolean);
-            }
-          });
-        }
+      // _parseGASRow extrai dados do campo json; _deserializeNF expande itens comprimidos
+      loadedNF.map(_parseGASRow).map(_deserializeNF).filter(n=>n&&n.id).forEach(n=>{
         // Dedup por id
         const exId=nfMapById[n.id];
         if(!exId||(sfPrio[n.status]||0)>=(sfPrio[exId.status]||0)) nfMapById[n.id]=n;
