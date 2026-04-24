@@ -1587,35 +1587,34 @@ function saveProd(){
   const mat=document.getElementById('mprod-material').value.trim();
   if(!mat){alert('Nome do material obrigatório!');return;}
   const val=document.getElementById('mprod-validade').value,comp=document.getElementById('mprod-compra').value,lote=document.getElementById('mprod-lote').value;
-
+  let prodToSave;
   if(editingProdId){
     const p=products.find(x=>x.id===editingProdId);
     Object.assign(p,{cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),validade:val,data_compra:comp,lote});
+    prodToSave = p;
   } else {
     const novoProd = {id:Date.now(),cod_bionexo:document.getElementById('mprod-bionexo').value,cod_hlr:document.getElementById('mprod-hlr').value,material:mat,pedido:null,urgente:'',marcas_pad:tempPad.join(', '),marcas_desq:tempDesq.join(', '),status:'normal',validade:val,data_compra:comp,lote};
     products.push(novoProd);
+    prodToSave = novoProd;
   }
   closeModal('modal-prod');renderProdutos();renderValidade();renderDashboard();
-  _salvarProdutos(editingProdId ? '✅ Produto atualizado!' : '✅ Produto cadastrado!');
+  _salvarProdutos(prodToSave, editingProdId ? '✅ Produto atualizado!' : '✅ Produto cadastrado!');
 }
 
-async function _salvarProdutos(msgSucesso){
-  // 1. Salva imediatamente em localStorage (confiável, síncrono)
+async function _salvarProdutos(prod, msgSucesso){
+  // 1. Salva imediatamente em localStorage
   try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
-
-  window._produtosSendoSalvos = true;
   showLoading('Salvando produto no banco de dados...');
   try {
-    await gsSaveArray('products', products);
+    // CRÍTICO: salva 1 produto individualmente (não todos os 677)
+    await _saveProductDirect(prod);
     hideLoading();
     if(msgSucesso) toast(msgSucesso, 'success');
   } catch(e){
     hideLoading();
-    // GAS falhou mas localStorage já foi salvo — dados não se perdem
-    toast('⚠️ Salvo localmente. Sincronização com servidor pendente.','warning');
-    console.warn('Erro ao salvar produtos no GAS:', e);
+    toast('⚠️ Salvo localmente. Sincronização pendente.','warning');
+    console.warn('Erro ao salvar produto no GAS:', e);
   }
-  window._produtosSendoSalvos = false;
 }
 
 // ── EXCLUIR PRODUTO ──────────────────────────────────────────────────────────
@@ -1625,7 +1624,11 @@ async function deleteProd(id){
   if(!confirm('Excluir o produto "'+p.material+'"?\n\nEsta ação não pode ser desfeita.'))return;
   products=products.filter(x=>x.id!==id);
   renderProdutos();renderValidade();renderDashboard();updateCriticosBadge();
-  await _salvarProdutos('🗑️ Produto excluído.');
+  try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
+  showLoading('Excluindo...');
+  await gsDelete('products', id).catch(()=>{});
+  hideLoading();
+  toast('🗑️ Produto excluído.');
 }
 // Estrutura: { "NOME_XML|COD_XML": prodId, ... }
 function loadVinc(){try{return JSON.parse(localStorage.getItem('fg_vinculos')||'{}');}catch{return{};}}
@@ -2116,7 +2119,8 @@ function _executarRegistroNF(numero,fornecedor,data,chave,ocIds){
   ocIds.forEach(id => linkNFToSpecificOC(nfItens, id));
   limparNFForm();
   renderDashboard();renderNFHistorico();renderOrders();renderRecebimento();renderEntregas();
-  saveMainState();
+  // CRÍTICO: salva NF IMEDIATAMENTE (1 requisição) antes de qualquer navegação
+  _saveNFDirect(nfEntry);
   // Navega para Recebimento (2ª etapa) de forma robusta
   _irParaRecebimento();
 }
@@ -2138,7 +2142,6 @@ function doVincular(pid){
   const p=products.find(x=>x.id===pid);
   if(!p)return;
   if(_vincMode==='ef'&&_vincIdx>=0){
-    // Vínculo no painel de itens da Entrega Futura
     const nf=nfHistory.find(n=>n.id===_efPainelNfId);
     if(nf&&nf.itens[_vincIdx]){
       nf.itens[_vincIdx].matched=[p];
@@ -2147,7 +2150,7 @@ function doVincular(pid){
     _vincIdx=-1;_vincMode='xml';
     closeModal('modal-vincular');
     _renderEFPainelItens();
-    saveMainState();
+    if(nf) _updateNFDirect(nf); else saveMainState();
   } else if(_vincIdx>=0){
     const it=nfItens[_vincIdx];
     it.matched=[p];
@@ -2157,14 +2160,13 @@ function doVincular(pid){
     closeModal('modal-vincular');renderDashboard();
     saveMainState();
   } else {
-    // historico mode
     const nf=nfHistory.find(n=>n.id===vincularNFId);
     if(nf&&p){
       const item=nf.itens.find(i=>i.descricao===vincularItemDesc);
       if(item){item.matched=[p];p.status='faturado';salvarVinculo(item.descricao,item.cod_prod||'',p.id);}
     }
     closeModal('modal-vincular');renderNFHistorico();renderDashboard();
-    saveMainState();
+    if(nf) _updateNFDirect(nf); else saveMainState();
   }
 }
 
@@ -2320,6 +2322,16 @@ function _executarConfirmacaoNF(nfId, resultado){
   renderDashboard();
   renderEstoque();renderMovimentos();updateCriticosBadge();renderOrders();
   if(document.getElementById('page-pedidos').classList.contains('active')) renderPedidos();
+  // CRÍTICO: atualiza NF (status=entregue) no GAS — 1 requisição
+  _updateNFDirect(nf);
+  // Salva produtos afetados individualmente
+  nf.itens?.forEach(it=>{
+    (it.matched||[]).forEach(copy=>{
+      const real=products.find(p=>p.id==copy.id);
+      if(real) _saveProductDirect(real);
+    });
+  });
+  // Backup localStorage
   saveMainState();
 }
 
@@ -3089,7 +3101,7 @@ function saveMovimento(){
     const id=document.getElementById('mmov-prod-id').value;
     const min=parseFloat(document.getElementById('mmov-estmin').value)||0;
     const p=products.find(x=>x.id==id);
-    if(p)p.estoque_min=min;
+    if(p){p.estoque_min=min; _saveProductDirect(p);}
     closeModal('modal-movimento');renderEstoque();saveMainState();return;
   }
   const id=document.getElementById('mmov-prod-id').value;
@@ -3099,19 +3111,23 @@ function saveMovimento(){
   const saldoAtual=getEstoque(id);
   if(_movTipo==='saida'&&qtd>saldoAtual){if(!confirm(`Saldo atual é ${saldoAtual}. Confirmar saída mesmo assim?`))return;}
   const saldo_apos=_movTipo==='entrada'?saldoAtual+qtd:saldoAtual-qtd;
-  // update estoque_min if provided
   const min=parseFloat(document.getElementById('mmov-estmin').value);
-  if(!isNaN(min)&&min>0){const p=products.find(x=>x.id==id);if(p)p.estoque_min=min;}
-  movimentos.push({
+  const p=products.find(x=>x.id==id);
+  if(!isNaN(min)&&min>0&&p)p.estoque_min=min;
+  const mov={
     id:Date.now(),tipo:_movTipo,prod_id:parseInt(id),qtd,
     data:document.getElementById('mmov-data').value,
     resp:currentUser?.name||'Sistema',
     obs:document.getElementById('mmov-obs').value,
     saldo_apos
-  });
+  };
+  movimentos.push(mov);
   _lastMovSaveTime = Date.now();
   closeModal('modal-movimento');renderEstoque();renderMovimentos();updateCriticosBadge();renderDashboard();
-  saveMainState(true);
+  // CRÍTICO: salva movimento e produto individualmente — 2 requisições, imediato
+  _saveMovimentoDirect(mov);
+  if(p) _saveProductDirect(p);
+  saveMainState();
 }
 
 // ── ITENS CRÍTICOS ──────────────────────────────────────────────────────────
@@ -3866,7 +3882,8 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
   nfManualItens = [];
   renderManualItens();
   renderDashboard(); renderNFHistorico(); renderOrders(); renderRecebimento(); renderEntregas();
-  saveMainState();
+  // CRÍTICO: salva NF IMEDIATAMENTE (1 requisição) antes de qualquer navegação
+  _saveNFDirect(nfEntry);
   // reset header fields for next use
   document.getElementById('mnf-numero').value='';
   document.getElementById('mnf-forn').value='';
@@ -3883,7 +3900,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbw6Ati5EyCSXl38nJhTAwoCCrI_IFHBSK0s8x0c-z82-aQ4mCsjYWYIG6WitC_NodoU/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbyJkgbTKdjRRlbxibUYaLUAyz2dwXHiPDKJwsZNKkyEKEYnLndiixT0aHsZx2x6bwyt/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -4059,80 +4076,206 @@ async function gsLoadArray(sheet) {
   } catch(e) { console.warn('gsLoadArray error ('+sheet+'):', e); return null; }
 }
 
-// Salva estado principal — uma chamada por entidade modificada
+// ═══════════════════════════════════════════════════════════════════════════════
+// ARQUITETURA DE SAVE — v3 (entidade-individual)
+//
+// PROBLEMA ANTERIOR: saveMainState salvava TUDO junto (677 produtos × chunkSize=3
+// = ~226 requisições ao GAS antes de chegar nas NFs). Se o usuário atualizasse
+// a página, as NFs nunca eram gravadas.
+//
+// SOLUÇÃO: cada entidade é salva INDIVIDUALMENTE no momento do evento:
+//   • NF cadastrada  → _saveNFDirect(nf)         → gsInsert 1 requisição
+//   • NF atualizada  → _updateNFDirect(nf)        → gsUpdate 1 requisição
+//   • Produto salvo  → _saveProductDirect(prod)   → gsInsert/gsUpdate 1 req
+//   • Movimento      → _saveMovimentoDirect(mov)  → gsInsert 1 requisição
+//   • Ordem/OC       → _saveOrderDirect(order)    → gsInsert/gsUpdate 1 req
+//
+// saveMainState() é mantido para compatibilidade mas só salva localStorage
+// e dispara saves individuais para itens pendentes na fila.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Fila de saves pendentes (itens criados offline que ainda não foram ao GAS)
+const _pendingSaves = { nfs: new Map(), products: new Map(), movimentos: new Map(), orders: new Map(), ocs: new Map() };
+let _isSavingNow = false;
+window._isSavePending = () => _isSavingNow || _pendingSaves.nfs.size > 0;
+
+// ── Serializa NF para o GAS (strip de matched completo, só id) ───────────────
+function _serializeNF(nf) {
+  return {
+    ...nf,
+    itens: JSON.stringify((Array.isArray(nf.itens) ? nf.itens : (typeof nf.itens==='string' ? JSON.parse(nf.itens) : [])).map(it=>({
+      descricao: it.descricao,
+      cod_prod: it.cod_prod,
+      quantidade: it.quantidade,
+      fator: it.fator,
+      valor_unitario: it.valor_unitario,
+      validade: it.validade,
+      lote: it.lote,
+      qty_unidades_final: it.qty_unidades_final,
+      qty_unidades: it.qty_unidades,
+      matched: (it.matched||[]).map(m=>({id:m.id})) // só o id, não o objeto inteiro
+    }))),
+    suspensao: nf.suspensao ? (typeof nf.suspensao==='string' ? nf.suspensao : JSON.stringify(nf.suspensao)) : ''
+  };
+}
+
+// ── Salva UMA NF nova no GAS (gsInsert = 1 requisição) ───────────────────────
+async function _saveNFDirect(nf) {
+  try {
+    const ser = _serializeNF(nf);
+    const res = await gsInsert('nf_history', ser);
+    if (res && res.status === 'ok') {
+      _pendingSaves.nfs.delete(String(nf.id));
+      try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
+      console.log('✅ NF salva no GAS:', nf.numero);
+    } else {
+      _pendingSaves.nfs.set(String(nf.id), nf);
+      console.warn('⚠️ NF não salva no GAS, ficou na fila:', res);
+    }
+  } catch(e) {
+    _pendingSaves.nfs.set(String(nf.id), nf);
+    console.warn('⚠️ Erro ao salvar NF, ficou na fila:', e);
+  }
+}
+
+// ── Atualiza UMA NF existente no GAS (gsUpdate = 1 requisição) ───────────────
+async function _updateNFDirect(nf) {
+  try {
+    const ser = _serializeNF(nf);
+    const merged = { json: JSON.stringify(ser) };
+    const res = await gsUpdate('nf_history', nf.id, merged);
+    if (res && res.status === 'ok') {
+      try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
+      console.log('✅ NF atualizada no GAS:', nf.numero, 'status:', nf.status);
+    } else if (res && res.status === 'not_found') {
+      // Nunca foi inserida — insere agora
+      console.warn('NF não encontrada no GAS, inserindo...', nf.id);
+      await _saveNFDirect(nf);
+    } else {
+      console.warn('⚠️ gsUpdate NF retornou:', res);
+    }
+  } catch(e) { console.warn('⚠️ Erro ao atualizar NF:', e); }
+}
+
+// ── Salva UM produto no GAS (insert se novo, update se existente) ─────────────
+async function _saveProductDirect(prod) {
+  if (!prod || !prod.id) return;
+  try {
+    // Verifica se já existe no GAS (via cache de ids conhecidos)
+    if (!window._knownGASProductIds) window._knownGASProductIds = new Set();
+    const ser = { ...prod };
+    if (window._knownGASProductIds.has(String(prod.id))) {
+      await gsUpdate('products', prod.id, { json: JSON.stringify(ser) });
+    } else {
+      const res = await gsInsert('products', ser);
+      if (res && res.status === 'ok') window._knownGASProductIds.add(String(prod.id));
+    }
+    _pendingSaves.products.delete(String(prod.id));
+  } catch(e) {
+    _pendingSaves.products.set(String(prod.id), prod);
+    console.warn('⚠️ Erro ao salvar produto:', e);
+  }
+}
+
+// ── Salva UM movimento no GAS ─────────────────────────────────────────────────
+async function _saveMovimentoDirect(mov) {
+  if (!mov || !mov.id) return;
+  try {
+    await gsInsert('movimentos', mov);
+    _pendingSaves.movimentos.delete(String(mov.id));
+  } catch(e) {
+    _pendingSaves.movimentos.set(String(mov.id), mov);
+    console.warn('⚠️ Erro ao salvar movimento:', e);
+  }
+}
+
+// ── Salva UMA ordem de compra/pedido no GAS ───────────────────────────────────
+async function _saveOrderDirect(order, sheet='orders') {
+  if (!order || !order.id) return;
+  try {
+    const ser = { ...order, itens: typeof order.itens==='string' ? order.itens : JSON.stringify(order.itens||[]) };
+    if (!window._knownGASOrderIds) window._knownGASOrderIds = new Set();
+    if (window._knownGASOrderIds.has(String(order.id))) {
+      await gsUpdate(sheet, order.id, { json: JSON.stringify(ser) });
+    } else {
+      const res = await gsInsert(sheet, ser);
+      if (res && res.status === 'ok') window._knownGASOrderIds.add(String(order.id));
+    }
+    _pendingSaves.orders.delete(String(order.id));
+  } catch(e) {
+    _pendingSaves.orders.set(String(order.id), order);
+    console.warn('⚠️ Erro ao salvar ordem:', e);
+  }
+}
+
+// ── Salva UMA OC no GAS ───────────────────────────────────────────────────────
+async function _saveOCDirect(oc) {
+  if (!oc || !oc.id) return;
+  try {
+    const ser = { ...oc, itens: typeof oc.itens==='string' ? oc.itens : JSON.stringify(oc.itens||[]) };
+    if (!window._knownGASOCIds) window._knownGASOCIds = new Set();
+    if (window._knownGASOCIds.has(String(oc.id))) {
+      await gsUpdate('oc_list', oc.id, { json: JSON.stringify(ser) });
+    } else {
+      const res = await gsInsert('oc_list', ser);
+      if (res && res.status === 'ok') window._knownGASOCIds.add(String(oc.id));
+    }
+    _pendingSaves.ocs.delete(String(oc.id));
+  } catch(e) {
+    _pendingSaves.ocs.set(String(oc.id), oc);
+    console.warn('⚠️ Erro ao salvar OC:', e);
+  }
+}
+
+// ── Drena fila de pendentes (chamado após reconexão ou init) ──────────────────
+async function _drainPendingSaves() {
+  for (const nf of _pendingSaves.nfs.values()) await _saveNFDirect(nf);
+  for (const p  of _pendingSaves.products.values()) await _saveProductDirect(p);
+  for (const m  of _pendingSaves.movimentos.values()) await _saveMovimentoDirect(m);
+  for (const o  of _pendingSaves.orders.values()) await _saveOrderDirect(o);
+  for (const oc of _pendingSaves.ocs.values()) await _saveOCDirect(oc);
+}
+
+// ── saveMainState — compatibilidade: só backup localStorage + fila ────────────
 let _saveTimer = null;
 let _savePending = false;
-let _isSavingNow = false; // true DURANTE a execução async do save (não apenas no debounce)
-let _lastMovSaveTime = 0; // timestamp of last local movimento save
+let _lastMovSaveTime = 0;
 function saveMainState(immediate=false) {
+  // Salva imediatamente no localStorage (nunca perde dados localmente)
+  try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
+  try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
+  try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
+  // Drena pendentes com debounce (não bloqueia a UI)
   _savePending = true;
   if(_saveTimer) clearTimeout(_saveTimer);
-  const delay = immediate ? 100 : 1000;
-  _saveTimer = setTimeout(async () => {
-    _savePending = false;
-    _isSavingNow = true; // bloqueia sincronizarDados enquanto salva
-    try {
-      await _doSaveMainState();
-    } finally {
-      _isSavingNow = false; // libera somente após o GAS confirmar
-    }
-  }, delay);
+  _saveTimer = setTimeout(() => { _savePending = false; _drainPendingSaves(); }, immediate ? 200 : 2000);
 }
-// sincronizarDados verifica este flag antes de sobrescrever dados locais
-window._isSavePending = () => _savePending || _isSavingNow;
 
+// ── _doSaveMainState — salva sincronização completa (apenas quando necessário) ─
+// Chamado apenas no loadMainState inicial para inicializar _knownGASIds
 async function _doSaveMainState() {
   try {
-    // Serializa NFs — CRÍTICO: strip de objetos "matched" completos antes de salvar
-    // matched guarda cópia do produto inteiro, inflando demais o JSON (causa URL overflow no GAS)
-    const nfSer = nfHistory.map(n => ({
-      ...n,
-      itens: typeof n.itens === 'string' ? n.itens : JSON.stringify((n.itens||[]).map(it=>({
-        descricao: it.descricao,
-        cod_prod: it.cod_prod,
-        quantidade: it.quantidade,
-        fator: it.fator,
-        valor_unitario: it.valor_unitario,
-        validade: it.validade,
-        lote: it.lote,
-        qty_unidades_final: it.qty_unidades_final,
-        qty_unidades: it.qty_unidades,
-        // matched: só salva o id do produto (não o objeto inteiro)
-        matched: (it.matched||[]).map(m=>({id:m.id}))
-      }))),
-      suspensao: n.suspensao ? (typeof n.suspensao === 'string' ? n.suspensao : JSON.stringify(n.suspensao)) : ''
-    }));
-    const ordersSer = purchaseOrders.map(o => ({
-      ...o,
-      itens: typeof o.itens === 'string' ? o.itens : JSON.stringify(o.itens||[])
-    }));
-    // Serializa itens das OCs antes de salvar
-    const ocsSer = (window._ocList || []).map(oc => ({
-      ...oc,
-      itens: typeof oc.itens === 'string' ? oc.itens : JSON.stringify(oc.itens||[])
-    }));
-
-    // SALVA SEQUENCIALMENTE — o GAS processa uma requisição por vez por script.
-    // Promise.all paralelo causa erros silenciosos no GAS.
-    // Lote 1: produtos e movimentos (dados de estoque — maior prioridade)
-    await gsSaveArray('products', products);
-    await gsSaveArray('movimentos', movimentos);
-    // Lote 2: NFs e entregas
-    await gsSaveArray('nf_history', nfSer);
-    await gsSaveArray('entregas', entregas);
-    // Lote 3: ordens de compra e OCs
-    await gsSaveArray('orders', ordersSer);
-    await gsSaveArray('oc_list', ocsSer);
-    // Lote 4: validades
-    await gsSaveArray('val_alerts', validadeAlerts);
-
-    // Registra momento em que o save concluiu — sincronizarDados usa isso para não sobrescrever
+    _isSavingNow = true;
+    // Inicializa os sets de IDs conhecidos no GAS
+    const [gasNFs, gasProds, gasOrds, gasOCs] = await Promise.all([
+      gsGetAll('nf_history', true),
+      gsGetAll('products', true),
+      gsGetAll('orders', true),
+      gsGetAll('oc_list', true)
+    ]);
+    window._knownGASProductIds = new Set((gasProds||[]).map(r=>String(r.id)));
+    window._knownGASOrderIds   = new Set((gasOrds||[]).map(r=>String(r.id)));
+    window._knownGASOCIds      = new Set((gasOCs||[]).map(r=>String(r.id)));
+    const gasNFIds             = new Set((gasNFs||[]).map(r=>String(r.id)));
+    // Insere no GAS qualquer NF local que ainda não está lá
+    for (const nf of nfHistory) {
+      if (!gasNFIds.has(String(nf.id))) {
+        await _saveNFDirect(nf);
+      }
+    }
     window._lastSaveCompleteTime = Date.now();
-    // Atualiza backups locais após save GAS confirmado
-    try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
-    try { localStorage.setItem('fg_nfhist_backup', JSON.stringify(nfHistory)); } catch(e){}
-
   } catch(e) { console.warn('_doSaveMainState error:', e); }
+  finally { _isSavingNow = false; }
 }
 
 async function loadMainState() {
