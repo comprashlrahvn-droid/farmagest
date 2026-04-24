@@ -3442,7 +3442,7 @@ function linkNFToSpecificOC(nfItensArr, ocId){
       if(ent === total) oc.status = 'atendida';
       else if(fat > 0) oc.status = fat === total ? 'enviada' : 'parcial';
       // Salva
-      if(window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+      window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
     }
   }
   updateOrdersBadge();
@@ -4045,35 +4045,64 @@ async function gsSaveArray(sheet, dataArray) {
   }
 }
 
-// Carrega um array salvo com gsSaveArray
+// Carrega um array — suporta DOIS formatos:
+// 1. Formato antigo: linhas chunk com id = sheet+'_0', sheet+'_1' etc, json = array serializado
+// 2. Formato novo (_saveXDirect): uma linha por entidade, id = timestamp, json = objeto serializado
 async function gsLoadArray(sheet) {
   try {
     const rows = await gsGetAll(sheet, true);
     if(!Array.isArray(rows) || rows.length === 0) return null;
-    // Filtra apenas linhas de chunks desta aba
-    const allChunks = rows.filter(r => String(r.id||'').startsWith(sheet+'_'));
-    if(allChunks.length === 0) return null;
 
-    // DEDUPLICAÇÃO: se houver múltiplas linhas com mesmo chunk id (bug de insert duplicado),
-    // mantém apenas a mais recente (último timestamp ou última posição na lista)
-    const chunkMap = {};
-    for(const row of allChunks) {
-      const cId = String(row.id||'');
-      // Última ocorrência vence (mais recente no sheet)
-      chunkMap[cId] = row;
-    }
-
-    const chunks = Object.values(chunkMap)
-      .sort((a,b) => Number(a.chunk||0) - Number(b.chunk||0));
+    // Separa chunks antigos das linhas individuais novas
+    const chunkRows = rows.filter(r => String(r.id||'').startsWith(sheet+'_'));
+    const directRows = rows.filter(r => !String(r.id||'').startsWith(sheet+'_'));
 
     let result = [];
-    for(const c of chunks) {
-      if(c.json) {
-        try { result = result.concat(JSON.parse(c.json)); } catch(e){}
+
+    // ── Processa chunks antigos (gsSaveArray) ──
+    if(chunkRows.length > 0) {
+      const chunkMap = {};
+      for(const row of chunkRows) { chunkMap[String(row.id||'')] = row; }
+      const chunks = Object.values(chunkMap).sort((a,b) => Number(a.chunk||0) - Number(b.chunk||0));
+      for(const c of chunks) {
+        if(c.json) { try { result = result.concat(JSON.parse(c.json)); } catch(e){} }
       }
     }
-    return result;
-  } catch(e) { console.warn('gsLoadArray error ('+sheet+'):', e); return null; }
+
+    // ── Processa linhas individuais novas (_saveNFDirect / _saveProductDirect etc) ──
+    // Cada linha tem: { id, json: "{...objeto serializado...}", timestamp }
+    const directItems = [];
+    for(const row of directRows) {
+      if(!row.json) continue;
+      try {
+        const parsed = JSON.parse(row.json);
+        // json pode ser o objeto diretamente OU um array (fallback)
+        if(Array.isArray(parsed)) {
+          directItems.push(...parsed);
+        } else if(parsed && typeof parsed === 'object') {
+          // Garante que o id da linha é o id autoritativo
+          if(row.id && !parsed.id) parsed.id = row.id;
+          directItems.push(parsed);
+        }
+      } catch(e){}
+    }
+
+    // Merge: começa com chunks antigos, adiciona/atualiza com linhas novas
+    // (linhas novas são mais recentes e tem prioridade para o mesmo id)
+    if(directItems.length > 0) {
+      const byId = {};
+      for(const item of result)      { if(item.id !== undefined) byId[String(item.id)] = item; }
+      for(const item of directItems) { if(item.id !== undefined) byId[String(item.id)] = item; }
+      result = Object.values(byId);
+      // Se não houve chunks, retorna direto os itens individuais
+      if(chunkRows.length === 0) result = directItems;
+    }
+
+    return result.length > 0 ? result : null;
+  } catch(e) {
+    console.warn('gsLoadArray error ('+sheet+'):', e);
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -4290,43 +4319,46 @@ async function loadMainState() {
     const loadedOrders   = await gsLoadArray('orders');
     const loadedVal      = await gsLoadArray('val_alerts');
 
-    if(Array.isArray(loadedProducts) && loadedProducts.length > 0) {
-      // GS é a fonte autoritativa — corrige tipos e usa diretamente
-      const savedById = {};
-      loadedProducts.forEach(p => {
-        if(p.id) p.id = isNaN(p.id) ? p.id : Number(p.id);
-        if(p.pedido !== undefined && p.pedido !== null && p.pedido !== '') p.pedido = Number(p.pedido)||null;
-        if(p.qty_faturada !== undefined) p.qty_faturada = Number(p.qty_faturada)||0;
-        if(p.estoque_min !== undefined) p.estoque_min = Number(p.estoque_min)||0;
-        savedById[p.id] = p;
-      });
-      // PRODUCTS_RAW fornece campos padrão; GS sobrescreve com dados reais
+    // ── PRODUTOS ────────────────────────────────────────────────────────────────
+    // Estratégia delta: PRODUCTS_RAW (677 itens) é a base hardcoded no HTML.
+    // O GAS só armazena o DELTA: produtos novos e modificações dos usuários.
+    // Isso evita salvar/carregar 677 itens do GAS (URL longa → erro silencioso).
+    {
+      // 1. Começa com a base hardcoded
       const baseById = {};
-      PRODUCTS_RAW.forEach(p => { baseById[p.id] = {...p}; });
-      // Lista final = todos os produtos do GS (inclui novos de qualquer usuário)
-      products = loadedProducts.map(p => baseById[p.id] ? {...baseById[p.id], ...p} : {...p});
-      // Atualiza backup local com dados do GS
-      try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
-    } else {
-      // GS vazio ou falhou — tenta backup do localStorage antes de usar catálogo base
-      let localBackup = null;
-      try { localBackup = JSON.parse(localStorage.getItem('fg_products_backup') || 'null'); } catch(e){}
-      if(Array.isArray(localBackup) && localBackup.length > 0) {
-        console.warn('loadMainState: GS retornou vazio para products — usando backup localStorage');
-        products = localBackup;
-        // Tenta resincronizar com GAS em background
-        setTimeout(() => gsSaveArray('products', products).catch(()=>{}), 3000);
+      PRODUCTS_RAW.forEach(p => { baseById[String(p.id)] = {...p}; });
+
+      // 2. Overlay com delta do GAS (produtos novos + campos editados)
+      if(Array.isArray(loadedProducts) && loadedProducts.length > 0) {
+        loadedProducts.map(_parseGASRow).forEach(p => {
+          if(!p || !p.id) return;
+          p.id = isNaN(p.id) ? p.id : Number(p.id);
+          if(p.pedido !== undefined && p.pedido !== '') p.pedido = Number(p.pedido)||null;
+          if(p.qty_faturada !== undefined) p.qty_faturada = Number(p.qty_faturada)||0;
+          if(p.estoque_min !== undefined) p.estoque_min = Number(p.estoque_min)||0;
+          const key = String(p.id);
+          // Merge: campos do GAS sobrescrevem a base (dados do usuário têm prioridade)
+          baseById[key] = baseById[key] ? {...baseById[key], ...p} : {...p};
+        });
+        // Inicializa o set de IDs conhecidos no GAS (para _saveProductDirect saber se insert ou update)
+        window._knownGASProductIds = new Set(loadedProducts.map(p => String(p.id||'')).filter(Boolean));
       } else {
-        // Nenhuma fonte disponível — usa catálogo base
-        products = JSON.parse(JSON.stringify(PRODUCTS_RAW));
+        // GAS vazio para products é NORMAL na primeira vez — não é erro.
+        // Os 677 produtos base já estão em PRODUCTS_RAW. Nenhum save necessário.
+        console.log('[PRODUCTS] GAS delta vazio — usando catálogo base PRODUCTS_RAW (' + PRODUCTS_RAW.length + ' itens)');
+        window._knownGASProductIds = new Set();
       }
+
+      products = Object.values(baseById);
+      try { localStorage.setItem('fg_products_backup', JSON.stringify(products)); } catch(e){}
     }
 
     if(Array.isArray(loadedNF) && loadedNF.length > 0) {
       const sfPrio={entregue:3,suspensa:2,faturado:1};
       const nfMapById={};
       const nfMapByNum={};
-      loadedNF.forEach(n=>{
+      // CRÍTICO: parseia o campo json de cada row — _saveNFDirect salva uma linha por NF
+      loadedNF.map(_parseGASRow).forEach(n=>{
         if(n.id) n.id = isNaN(n.id) ? n.id : Number(n.id);
         if(typeof n.itens === 'string') { try { n.itens = JSON.parse(n.itens); } catch(e){n.itens=[];} }
         if(typeof n.suspensao === 'string' && n.suspensao) { try { n.suspensao = JSON.parse(n.suspensao); } catch(e){} }
@@ -4374,7 +4406,7 @@ async function loadMainState() {
 
     // GAS é a fonte autoritativa para movimentos — sempre carrega se disponível
     if(Array.isArray(loadedMov) && loadedMov.length > 0) {
-      movimentos = loadedMov.map(m => {
+      movimentos = loadedMov.map(_parseGASRow).map(m => {
         if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
         if(m.saldo_apos !== undefined) m.saldo_apos = Number(m.saldo_apos)||0;
         if(m.prod_id !== undefined) m.prod_id = isNaN(m.prod_id) ? m.prod_id : Number(m.prod_id);
@@ -4383,20 +4415,18 @@ async function loadMainState() {
     }
 
     if(Array.isArray(loadedEntregas) && loadedEntregas.length > 0) {
-      entregas = loadedEntregas;
+      entregas = loadedEntregas.map(_parseGASRow);
     }
 
     if(Array.isArray(loadedOrders) && loadedOrders.length > 0) {
-      purchaseOrders = loadedOrders.map(o => {
+      purchaseOrders = loadedOrders.map(_parseGASRow).map(o => {
         if(o.id) o.id = isNaN(o.id) ? o.id : Number(o.id);
         if(typeof o.itens === 'string') { try { o.itens = JSON.parse(o.itens); } catch(e){o.itens=[];} }
         return o;
       });
-      window.purchaseOrders = purchaseOrders; // mantém referência global sincronizada
-      // Atualiza backup local sempre que GAS tiver dados válidos
+      window.purchaseOrders = purchaseOrders;
       try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
     } else {
-      // GAS retornou vazio (timeout ou ainda não salvou) — usa backup do localStorage
       try {
         const backup = JSON.parse(localStorage.getItem('fg_orders_backup') || 'null');
         if(Array.isArray(backup) && backup.length > 0) {
@@ -4412,7 +4442,7 @@ async function loadMainState() {
     }
 
     if(Array.isArray(loadedVal) && loadedVal.length > 0) {
-      validadeAlerts = loadedVal;
+      validadeAlerts = loadedVal.map(_parseGASRow);
     }
 
     // Carrega OCs salvas
@@ -4434,7 +4464,7 @@ async function loadMainState() {
         // Persiste já limpa para o GAS para corrigir a planilha
         if(window.gsSaveArray && window._ocList.length>0){
           const ocsSer=window._ocList.map(oc=>({...oc,itens:JSON.stringify(oc.itens||[])}));
-          window.gsSaveArray('oc_list',ocsSer).catch(()=>{});
+          ocsSer.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
         }
       }
     } catch(e) {}
@@ -4784,9 +4814,10 @@ async function confirmarImportacaoPlanilha() {
   const resp = (currentUser && currentUser.name) ? currentUser.name : 'Importação Planilha';
 
   // Adiciona cada item como movimentação de entrada
+  const novosMov = [];
   itensValidos.forEach(item => {
     const saldoAtual = getEstoque(item.prod.id);
-    movimentos.push({
+    const mov = {
       id: Date.now() + Math.random(),
       tipo: 'entrada',
       prod_id: item.prod.id,
@@ -4795,15 +4826,17 @@ async function confirmarImportacaoPlanilha() {
       resp: resp,
       obs: `Entrada via importação de planilha (${hoje})`,
       saldo_apos: saldoAtual + item.qty
-    });
+    };
+    movimentos.push(mov);
+    novosMov.push(mov);
   });
 
-  // Marca o timestamp ANTES de salvar para proteger da sincronização automática
-  // (proteção _lastMovSaveTime removida — o GAS agora é sempre autoritativo)
-
   try {
-    // Salva diretamente no Google Sheets (aguarda confirmação)
-    await gsSaveArray('movimentos', movimentos);
+    // CRÍTICO: salva cada movimento individualmente (1 requisição por item)
+    // gsSaveArray de todos os movimentos era muito lento (centenas de requisições)
+    for (const mov of novosMov) {
+      await _saveMovimentoDirect(mov);
+    }
     hideLoading();
     renderEstoque();
     renderMovimentos();
@@ -6754,14 +6787,9 @@ function salvarOC(oc) {
   } else {
     window._ocList.push(oc);
   }
-  // CORRECAO: marca timestamp de save para impedir que o sync sobrescreva
-  // a lista local antes do save no GAS ser confirmado.
+  // CRÍTICO: salva apenas esta OC individualmente (não toda a lista)
   window._lastOCSaveTime = Date.now();
-  if (window.gsSaveArray) {
-    Promise.resolve(window.gsSaveArray('oc_list', window._ocList))
-      .then(function() { window._lastOCSaveTime = Date.now(); })
-      .catch(function() { window._lastOCSaveTime = Date.now(); });
-  }
+  _saveOCDirect(oc).then(() => { window._lastOCSaveTime = Date.now(); }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7409,7 +7437,7 @@ window.enviarOCFornecedor = async function(ocId) {
     if (res && res.success) {
       const ocSalva = window._ocList.find(x => x.id === oc.id);
       if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
-      if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+      window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
       fecharModalOC();
       renderOCPage();
       if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email} com PDF anexado!`, 'success');
@@ -7441,7 +7469,7 @@ function _enviarOCViaMailto(oc, email, itensTexto) {
   // Marca como enviada
   const ocSalva = window._ocList.find(x => x.id === oc.id);
   if (ocSalva) { ocSalva.status = 'enviada'; }
-  if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+  window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
   fecharModalOC();
   renderOCPage();
   if (window.toast) window.toast(`📧 E-mail de OC aberto para ${email}. Faça o download do PDF para anexar.`, 'success');
@@ -7573,7 +7601,7 @@ window.cancelarOC = function(id) {
   if (!confirm('Cancelar esta OC?')) return;
   const oc = window._ocList.find(x => x.id === id);
   if (oc) { oc.status = 'cancelada'; }
-  if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+  window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
   renderOCPage();
   if (window.toast) window.toast('OC cancelada.', 'warning');
 };
@@ -7581,7 +7609,7 @@ window.cancelarOC = function(id) {
 window.excluirOC = function(id) {
   if (!confirm('Excluir esta OC permanentemente? Esta ação não pode ser desfeita.')) return;
   window._ocList = (window._ocList || []).filter(x => x.id !== id);
-  if (window.gsSaveArray) window.gsSaveArray('oc_list', window._ocList);
+  window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
   renderOCPage();
   if (window.toast) window.toast('OC excluída.', 'danger');
 };
@@ -7672,7 +7700,7 @@ function dedupOCList() {
     // Persiste lista limpa no servidor
     if (window.gsSaveArray) {
       window._lastOCSaveTime = Date.now();
-      window.gsSaveArray('oc_list', window._ocList);
+      window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
     }
   }
 }
@@ -7729,7 +7757,7 @@ function atualizarOCsComPedido() {
     }
   });
   if (atualizado && window.gsSaveArray) {
-    window.gsSaveArray('oc_list', window._ocList);
+    window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
   }
 }
 
