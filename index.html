@@ -3218,17 +3218,18 @@ function gerarPedido(){
     status:'aberto' // aberto | parcial | faturado | entregue
   };
   purchaseOrders.push(ordem);
-  window.purchaseOrders = purchaseOrders; // mantém referência global sincronizada
-  // BACKUP IMEDIATO no localStorage — antes de qualquer async/GAS
+  window.purchaseOrders = purchaseOrders;
   try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
-  // Clear pedido quantities
   itens.forEach(p=>{p.pedido=null;p.status='normal';});
   updateBadges();updateOrdersBadge();
   renderPedidos();
-  saveMainState();
+  // CRÍTICO: salva ordem imediatamente no GAS (1 requisição)
+  _saveOrderDirect(ordem).then(()=>{
+    toast('✅ '+ordem.numero+' salva no banco de dados!','success');
+  }).catch(()=>{
+    toast('⚠️ Pedido salvo localmente. Verifique conexão com o banco.','warning');
+  });
   alert(`✅ ${ordem.numero} gerada com ${itens.length} item(s)!\nAcesse "Ordens de Compra" no menu para acompanhar.`);
-  // Avisa o usuário para não atualizar a página até o save concluir
-  if(window.toast) window.toast('💾 Salvando pedido no banco de dados... Não atualize a página ainda.', 'warning');
 }
 
 function updateOrdersBadge(){
@@ -3509,15 +3510,14 @@ function linkDeliveryToOrders(nfEntry){
   const jaExiste = movimentos.some(m => m.obs && m.obs.includes(nfTag));
   if(jaExiste) return [];
 
-  // Rastreia quais prod_ids ja receberam entrada nesta confirmacao para evitar duplicatas
   const jaLancado = new Set();
-  const alertasValCurta = []; // lotes com validade curta detectados agora
+  const alertasValCurta = [];
+  const novosMov = []; // movimentos criados agora — serão salvos no GAS abaixo
 
-  // Helper interno: lança entrada no estoque e verifica validade curta
   function _lancarEntrada(prodId, qtdUn, it){
     const saldoAtual = getEstoque(prodId);
     const prod = products.find(p=>p.id==prodId);
-    movimentos.push({
+    const mov = {
       id: Date.now()+Math.random(),
       tipo: 'entrada',
       prod_id: prodId,
@@ -3528,45 +3528,42 @@ function linkDeliveryToOrders(nfEntry){
       resp: 'Sistema (NF '+nfEntry.numero+')',
       obs: 'Entrada automatica — NF '+nfEntry.numero+' ('+nfEntry.fornecedor+')',
       saldo_apos: saldoAtual+qtdUn
-    });
-    // Atualiza lote e validade no produto se vieram da NF
+    };
+    movimentos.push(mov);
+    novosMov.push(mov);
     if(prod){
       if(it.lote) prod.lote = it.lote;
       if(it.validade) prod.validade = it.validade;
     }
-    // Verifica validade curta e registra alerta se necessário
     const validade = it.validade || prod?.validade || '';
     const lote = it.lote || prod?.lote || '';
     const dias = diasParaVencer(validade);
     if(validade && dias !== null && dias <= VALIDADE_CURTA_DIAS){
       const registrado = registrarLoteValCurta(
-        prodId,
-        prod?.material || it.descricao || '',
-        prod?.cod_bionexo || '',
-        validade, lote,
-        nfEntry.numero, nfEntry.fornecedor,
-        nfEntry.data
+        prodId, prod?.material || it.descricao || '',
+        prod?.cod_bionexo || '', validade, lote,
+        nfEntry.numero, nfEntry.fornecedor, nfEntry.data
       );
       if(registrado){
-        alertasValCurta.push({
-          material: prod?.material || it.descricao || '',
-          lote, validade, dias,
-          nf: nfEntry.numero
-        });
+        alertasValCurta.push({ material: prod?.material || it.descricao || '', lote, validade, dias, nf: nfEntry.numero });
       }
     }
   }
 
+  const ordensAfetadas = new Set();
+
   // 1. Atualiza ordens de compra vinculadas e lança entrada no estoque
   purchaseOrders.forEach(o=>{
-    if(o.status==='entregue')return;
+    if(o.status==='entregue') return;
+    let ordemAlterada = false;
     o.itens.forEach(oi=>{
-      if(oi.status!=='faturado')return;
+      if(oi.status!=='faturado') return;
       const nfItem=nfEntry.itens?.find(ni=>ni.matched?.some(m=>m.id===oi.prod_id));
       if(nfItem){
         const qtdUn=calcQtdUn(nfItem);
         oi.qty_entregue=(oi.qty_entregue||0)+qtdUn;
         oi.status='entregue';
+        ordemAlterada = true;
         if(!jaLancado.has(oi.prod_id)){
           jaLancado.add(oi.prod_id);
           _lancarEntrada(oi.prod_id, qtdUn, nfItem);
@@ -3574,23 +3571,33 @@ function linkDeliveryToOrders(nfEntry){
       }
     });
     o.status=calcOrderStatus(o);
+    if(ordemAlterada) ordensAfetadas.add(o);
   });
 
-  // 2. Lanca entrada para itens vinculados da NF que NAO estao em nenhuma ordem de compra
+  // 2. Lança entrada para itens vinculados sem ordem de compra
   (nfEntry.itens||[]).forEach(it=>{
-    if(!it.matched?.length)return;
+    if(!it.matched?.length) return;
     const prodId=it.matched[0].id;
-    if(jaLancado.has(prodId))return;
+    if(jaLancado.has(prodId)) return;
     const qtdUn=it.qty_unidades_final||calcQtdUn(it);
-    if(qtdUn>0){
-      jaLancado.add(prodId);
-      _lancarEntrada(prodId, qtdUn, it);
-    }
+    if(qtdUn>0){ jaLancado.add(prodId); _lancarEntrada(prodId, qtdUn, it); }
   });
+
+  // CRÍTICO: salva movimentos e ordens no GAS imediatamente
+  // Antes faltava esta etapa — movimentos ficavam só em memória e sumiam ao recarregar
+  novosMov.forEach(m => _saveMovimentoDirect(m).catch(e=>console.warn('mov save err:',e)));
+  ordensAfetadas.forEach(o => _saveOrderDirect(o).catch(e=>console.warn('order save err:',e)));
+  // Salva produtos com lote/validade atualizados
+  jaLancado.forEach(pid => {
+    const p = products.find(x=>x.id==pid);
+    if(p) _saveProductDirect(p).catch(()=>{});
+  });
+  // Backup localStorage
+  try { localStorage.setItem('fg_movimentos_backup', JSON.stringify(movimentos)); } catch(e){}
 
   updateOrdersBadge();
-  _lastMovSaveTime = Date.now(); // proteção: não sobrescrever movimentos recém-criados por NF
-  renderEstoque();renderMovimentos();updateCriticosBadge();
+  _lastMovSaveTime = Date.now();
+  renderEstoque(); renderMovimentos(); updateCriticosBadge();
   if(alertasValCurta.length) renderValidade();
   return alertasValCurta;
 }
@@ -3900,7 +3907,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbzHHz0Bux6XYoyzkYKyHiOOWy-HG5iLn7eRXnq4KCV0rO78zsVEOxdFC3NGxAa1T12j/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbxKCSyGCJkW2Ad83XY2IKZEskFRa_5AEPaz5Jtcnas8AXjzYB32AIYjMvhORl1hxTr9/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -3946,33 +3953,33 @@ async function gsGetAll(sheet, force=false) {
   return gsCache[sheet]||[];
 }
 // CORREÇÃO CRÍTICA: GAS redireciona POST cross-origin para GET (302 redirect),
-// perdendo o body da requisição. Solução: usar GET com dados na URL.
-// Para reduzir tamanho da URL, dados são codificados em base64 (1.33x) em vez de
-// encodeURIComponent (até 3x) — NFs com muitos itens cabem dentro do limite de 8KB.
+// perdendo o body da requisição. Solução: usar GET com dados na URL em base64.
+async function _gasFetch(url) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const r = await fetch(url, { redirect: 'follow' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch(e) {
+      if (attempt === 3) return null;
+      await new Promise(res => setTimeout(res, 1000 * attempt));
+    }
+  }
+  return null;
+}
 async function gsInsert(sheet, data) {
-  try {
-    const json = JSON.stringify(data);
-    const url = GS_API
-      + '?action=insert'
-      + '&sheet=' + encodeURIComponent(sheet)
-      + '&data='  + _toB64(json)
-      + '&enc=b64';
-    const r = await fetch(url);
-    return await r.json();
-  } catch(e) { return null; }
+  const b64 = encodeURIComponent(_toB64(JSON.stringify(data)));
+  const url = `${GS_API}?action=insert&sheet=${encodeURIComponent(sheet)}&data=${b64}&enc=b64`;
+  const res = await _gasFetch(url);
+  if (!res) console.warn('gsInsert falhou (sheet='+sheet+') — verifique URL do GAS');
+  return res;
 }
 async function gsUpdate(sheet, id, data) {
-  try {
-    const json = JSON.stringify(data);
-    const url = GS_API
-      + '?action=update'
-      + '&sheet=' + encodeURIComponent(sheet)
-      + '&id='   + encodeURIComponent(String(id))
-      + '&data=' + _toB64(json)
-      + '&enc=b64';
-    const r = await fetch(url);
-    return await r.json();
-  } catch(e) { return null; }
+  const b64 = encodeURIComponent(_toB64(JSON.stringify(data)));
+  const url = `${GS_API}?action=update&sheet=${encodeURIComponent(sheet)}&id=${encodeURIComponent(String(id))}&data=${b64}&enc=b64`;
+  const res = await _gasFetch(url);
+  if (!res) console.warn('gsUpdate falhou (sheet='+sheet+', id='+id+')');
+  return res;
 }
 async function gsDelete(sheet, id) {
   try {
@@ -4448,7 +4455,7 @@ async function loadMainState() {
       } catch(e) {}
     }
 
-    // GAS é a fonte autoritativa para movimentos — sempre carrega se disponível
+    // GAS é a fonte autoritativa para movimentos
     if(Array.isArray(loadedMov) && loadedMov.length > 0) {
       movimentos = loadedMov.map(_parseGASRow).map(m => {
         if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
@@ -4456,6 +4463,22 @@ async function loadMainState() {
         if(m.prod_id !== undefined) m.prod_id = isNaN(m.prod_id) ? m.prod_id : Number(m.prod_id);
         return m;
       });
+      try { localStorage.setItem('fg_movimentos_backup', JSON.stringify(movimentos)); } catch(e){}
+    } else {
+      // GAS vazio — restaura do localStorage
+      try {
+        const bkp = JSON.parse(localStorage.getItem('fg_movimentos_backup')||'null');
+        if(Array.isArray(bkp) && bkp.length > 0) {
+          movimentos = bkp.map(m => {
+            if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
+            if(m.prod_id !== undefined) m.prod_id = isNaN(m.prod_id) ? m.prod_id : Number(m.prod_id);
+            return m;
+          });
+          console.warn('[MOV] GAS vazio — restaurado localStorage ('+movimentos.length+' movimentos)');
+          // Reenvia ao GAS em background
+          movimentos.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
+        }
+      } catch(e){}
     }
 
     if(Array.isArray(loadedEntregas) && loadedEntregas.length > 0) {
@@ -7552,7 +7575,15 @@ window.renderOCPage = function() {
     cancelada: '<span class="oc-badge-status oc-s-cancelada">🚫 Cancelada</span>'
   };
 
-  el.innerHTML = lista.map(oc => `
+  el.innerHTML = lista.map(oc => {
+    const emailBadge = oc.emailStatus === 'confirmado'
+      ? `<span class="badge" style="background:rgba(0,212,170,0.15);color:var(--accent);font-size:0.72rem;border:1px solid var(--accent)">✅ Fornecedor confirmou recebimento</span>`
+      : oc.emailStatus === 'visualizado'
+      ? `<span class="badge" style="background:rgba(59,130,246,0.15);color:#60a5fa;font-size:0.72rem;border:1px solid #60a5fa">👁️ E-mail visualizado pelo fornecedor</span>`
+      : oc.emailStatus === 'enviado'
+      ? `<span class="badge badge-gray" style="font-size:0.72rem">📤 E-mail enviado (aguardando leitura)</span>`
+      : '';
+    return `
     <div class="oc-card">
       <div class="oc-card-header">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -7566,6 +7597,7 @@ window.renderOCPage = function() {
           <span class="dim" style="font-size:0.75rem">${oc.itens ? oc.itens.length : 0} item(s)</span>
         </div>
       </div>
+      ${emailBadge ? `<div style="margin-top:6px">${emailBadge}</div>` : ''}
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         ${oc.cond_pgto ? `<span class="badge badge-gray" style="font-size:0.72rem">💳 ${oc.cond_pgto}</span>` : ''}
         ${oc.prev_entrega ? `<span class="badge badge-blue" style="font-size:0.72rem">📅 Prev: ${formatarData(oc.prev_entrega)}</span>` : ''}
@@ -7589,8 +7621,9 @@ window.renderOCPage = function() {
         </div>`;
       })()}
     </div>
-  `).join('');
-};
+  `;
+  }).join('');
+}
 
 window.filtrarOCs = function() {
   renderOCPage();
@@ -7754,14 +7787,50 @@ async function carregarOCSalvas() {
   try {
     const salvas = await window.gsLoadArray('oc_list');
     if (Array.isArray(salvas) && salvas.length > 0) {
-      window._ocList = salvas.map(oc => ({
-        ...oc,
-        itens: typeof oc.itens === 'string' ? JSON.parse(oc.itens) : (oc.itens || [])
-      }));
-      // CORRECAO: remove duplicatas imediatamente apos carregar do servidor
+      window._ocList = salvas.map(oc => {
+        // Parseia json se vier como row bruto do GAS
+        const parsed = _parseGASRow(oc);
+        return {
+          ...parsed,
+          itens: typeof parsed.itens === 'string'
+            ? (() => { try { return JSON.parse(parsed.itens); } catch(e){ return []; } })()
+            : (parsed.itens || [])
+        };
+      });
       dedupOCList();
     }
-  } catch(e) {}
+    // Carrega status de leitura dos e-mails
+    await _carregarStatusEmailOC();
+  } catch(e) { console.warn('carregarOCSalvas error:', e); }
+}
+
+// Carrega da planilha oc_emails_log e atualiza cada OC com status de leitura
+async function _carregarStatusEmailOC() {
+  try {
+    const rows = await gsGetAll('oc_emails_log', true);
+    if (!Array.isArray(rows) || !rows.length) return;
+    // Mapa: oc_id → { status, data }
+    const statusMap = {};
+    rows.slice(1).forEach(r => { // pula header
+      const vals = Array.isArray(r) ? r : Object.values(r);
+      const ocId = String(vals[0]||'');
+      const status = String(vals[4]||'');
+      const data = String(vals[5]||'');
+      if (ocId && (!statusMap[ocId] || status === 'confirmado')) {
+        statusMap[ocId] = { status, data };
+      }
+    });
+    // Injeta em cada OC
+    window._ocList.forEach(oc => {
+      const st = statusMap[String(oc.id)] || statusMap[String(oc.numero)];
+      if (st) {
+        oc.emailStatus = st.status;   // 'enviado' | 'visualizado' | 'confirmado'
+        oc.emailStatusAt = st.data;
+      }
+    });
+    // Re-renderiza painel de OCs se estiver visível
+    if (typeof window.renderizarListaOCs === 'function') window.renderizarListaOCs();
+  } catch(e) { console.warn('_carregarStatusEmailOC error:', e); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
