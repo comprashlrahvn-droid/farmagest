@@ -3992,7 +3992,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbwMo334Rkw1mcPJUtPgcyJZEbmsG8w22mKOnaoqnV8Arf4rQJI2VsZV-L7fHr4Kl6UD/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycby_xaf_ImhKpDgkjJTIJCUvObITXQJP3rQi13lD9a5kHMGndjDLVrfEawoyVARYMdOm/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -7546,26 +7546,17 @@ window.enviarOCFornecedor = async function(ocId) {
     return;
   }
 
-  // Monta lista de itens em texto (mantida para fallback mailto)
+  // Monta lista de itens em texto
   const itensTexto = oc.itens.map((it, i) =>
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  // Gera o PDF real da OC e envia como anexo via GAS
-  showLoading('Gerando PDF da OC...');
+  showLoading('Enviando OC ao fornecedor...');
   try {
-    const pdfBlob = await _gerarPDFBlob(oc);
-    const base64  = await _blobParaBase64(pdfBlob);
-    const _nomeFornEmail = (oc.fornecedor || 'Fornecedor').replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, '').trim().substring(0, 40);
-    let _ddmmaaaaEmail = '';
-    try {
-      const _dOC = oc.data ? new Date(oc.data + 'T12:00:00') : new Date();
-      _ddmmaaaaEmail = String(_dOC.getDate()).padStart(2,'0') + String(_dOC.getMonth()+1).padStart(2,'0') + _dOC.getFullYear();
-    } catch(e) { _ddmmaaaaEmail = new Date().toLocaleDateString('pt-BR').replace(/\//g,''); }
-    const nomePDF = `OC ${_nomeFornEmail} ${_ddmmaaaaEmail}.pdf`;
-
+    // SOLUÇÃO: envia metadados via GET (sem PDF — PDF é muito grande para URL).
+    // O PDF fica disponível para download local pelo botão "⬇️ PDF".
+    // O e-mail contém todos os dados da OC e o botão de confirmação de recebimento.
     const gasPayload = {
-      action:       'sendOCEmail',
       to_email:     email,
       to_name:      oc.fornecedor,
       oc_id:        String(oc.id),
@@ -7577,14 +7568,9 @@ window.enviarOCFornecedor = async function(ocId) {
       total_geral:  fmtBRL(oc.total || 0),
       obs:          oc.obs || '',
       from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
-      forn_cnpj:    oc.forn_cnpj || '',
-      pdf_base64:   base64,
-      pdf_nome:     nomePDF
+      forn_cnpj:    oc.forn_cnpj || ''
     };
 
-    showLoading('Enviando OC ao fornecedor...');
-    // CRÍTICO: GAS não processa POST cross-origin (302 redirect perde o body).
-    // Usa GET com payload em base64 — mesmo padrão de gsInsert/gsUpdate.
     const b64Payload = encodeURIComponent(_toB64(JSON.stringify(gasPayload)));
     const sendUrl = `${GS_API}?action=sendOCEmail&data=${b64Payload}&enc=b64`;
     const resp = await _gasFetch(sendUrl);
@@ -7596,15 +7582,16 @@ window.enviarOCFornecedor = async function(ocId) {
         ocSalva.status = 'enviada';
         ocSalva.enviada_em = new Date().toISOString();
         ocSalva.emailStatus = 'enviado';
-        // CRÍTICO: salva apenas esta OC (não toda a lista)
         await _saveOCDirect(ocSalva).catch(()=>{});
       }
       fecharModalOC();
       renderOCPage();
-      if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email} com PDF anexado!`, 'success');
+      toast(`📧 OC ${oc.numero} enviada para ${email}!\n💡 Para enviar o PDF, use o botão ⬇️ PDF e anexe manualmente ao e-mail.`, 'success');
     } else {
-      const motivo = (resp && resp.error) ? resp.error : 'Erro desconhecido';
-      if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
+      const motivo = (resp && resp.error) ? resp.error : 'Sem resposta do servidor';
+      toast(`⚠️ Falha ao enviar e-mail: ${motivo}`, 'error');
+      // Fallback: abre cliente de e-mail local
+      _enviarOCViaMailto(oc, email, itensTexto);
     }
   } catch(err) {
     hideLoading();
