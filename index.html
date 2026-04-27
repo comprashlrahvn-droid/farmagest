@@ -1631,12 +1631,97 @@ async function deleteProd(id){
   toast('🗑️ Produto excluído.');
 }
 // Estrutura: { "NOME_XML|COD_XML": prodId, ... }
-function loadVinc(){try{return JSON.parse(localStorage.getItem('fg_vinculos')||'{}');}catch{return{};}}
-function loadFatores(){try{return JSON.parse(localStorage.getItem('fg_fatores')||'{}');}catch{return{};}}
-function saveFatores(f){localStorage.setItem('fg_fatores',JSON.stringify(f));}
-function loadFator(desc,cod){const f=loadFatores();return f[(desc+'|'+cod).toUpperCase()]||f[desc.toUpperCase()]||1;}
+// ── VÍNCULOS E FATORES — armazenados no GAS (não apenas localStorage) ─────────
+// Antes: só localStorage → sumia em outro computador
+// Agora: GAS é a fonte principal, localStorage é cache local
+
+let _vincCache = null;
+let _fatCache  = null;
+
+async function loadVincFromGAS() {
+  try {
+    const rows = await gsGetAll('config_vinculos', true);
+    if (Array.isArray(rows) && rows.length > 0) {
+      const row = rows.map(_parseGASRow).find(r => r.key === 'vinculos');
+      if (row && row.value) {
+        const v = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
+        _vincCache = v;
+        try { localStorage.setItem('fg_vinculos', JSON.stringify(v)); } catch(e){}
+        return v;
+      }
+    }
+  } catch(e) {}
+  // Fallback localStorage
+  try { return JSON.parse(localStorage.getItem('fg_vinculos') || '{}'); } catch(e){ return {}; }
+}
+
+async function loadFatFromGAS() {
+  try {
+    const rows = await gsGetAll('config_vinculos', true);
+    if (Array.isArray(rows) && rows.length > 0) {
+      const row = rows.map(_parseGASRow).find(r => r.key === 'fatores');
+      if (row && row.value) {
+        const f = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
+        _fatCache = f;
+        try { localStorage.setItem('fg_fatores', JSON.stringify(f)); } catch(e){}
+        return f;
+      }
+    }
+  } catch(e) {}
+  try { return JSON.parse(localStorage.getItem('fg_fatores') || '{}'); } catch(e){ return {}; }
+}
+
+function loadVinc() {
+  if (_vincCache) return _vincCache;
+  try { return JSON.parse(localStorage.getItem('fg_vinculos') || '{}'); } catch(e){ return {}; }
+}
+function loadFatores() {
+  if (_fatCache) return _fatCache;
+  try { return JSON.parse(localStorage.getItem('fg_fatores') || '{}'); } catch(e){ return {}; }
+}
+
+async function _saveVincToGAS(v) {
+  try {
+    localStorage.setItem('fg_vinculos', JSON.stringify(v));
+    _vincCache = v;
+    const rows = await gsGetAll('config_vinculos', true);
+    const existing = Array.isArray(rows) ? rows.map(_parseGASRow).find(r => r.key === 'vinculos') : null;
+    const payload = { key: 'vinculos', value: JSON.stringify(v) };
+    if (existing && existing.id) {
+      await gsUpdate('config_vinculos', existing.id, { json: JSON.stringify({...existing, ...payload}) });
+    } else {
+      await gsInsert('config_vinculos', { id: 'vinc_' + Date.now(), ...payload });
+    }
+  } catch(e) { console.warn('Erro ao salvar vínculos no GAS:', e); }
+}
+
+async function _saveFatToGAS(f) {
+  try {
+    localStorage.setItem('fg_fatores', JSON.stringify(f));
+    _fatCache = f;
+    const rows = await gsGetAll('config_vinculos', true);
+    const existing = Array.isArray(rows) ? rows.map(_parseGASRow).find(r => r.key === 'fatores') : null;
+    const payload = { key: 'fatores', value: JSON.stringify(f) };
+    if (existing && existing.id) {
+      await gsUpdate('config_vinculos', existing.id, { json: JSON.stringify({...existing, ...payload}) });
+    } else {
+      await gsInsert('config_vinculos', { id: 'fat_' + Date.now(), ...payload });
+    }
+  } catch(e) { console.warn('Erro ao salvar fatores no GAS:', e); }
+}
+
+function saveVinc(v) {
+  localStorage.setItem('fg_vinculos', JSON.stringify(v));
+  _vincCache = v;
+  _saveVincToGAS(v).catch(()=>{});
+}
+function saveFatores(f) {
+  localStorage.setItem('fg_fatores', JSON.stringify(f));
+  _fatCache = f;
+  _saveFatToGAS(f).catch(()=>{});
+}
 function saveFator(desc,cod,fator){const f=loadFatores();f[(desc+'|'+cod).toUpperCase()]=fator;f[desc.toUpperCase()]=fator;saveFatores(f);}
-function saveVinc(v){localStorage.setItem('fg_vinculos',JSON.stringify(v));}
+function loadFator(desc,cod){const f=loadFatores();return f[(desc+'|'+cod).toUpperCase()]||f[desc.toUpperCase()]||1;}
 function vincKey(desc,cod){return (desc+'|'+cod).toUpperCase().trim();}
 
 function findVinculo(desc,cod){
@@ -3907,7 +3992,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbxKCSyGCJkW2Ad83XY2IKZEskFRa_5AEPaz5Jtcnas8AXjzYB32AIYjMvhORl1hxTr9/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbwMo334Rkw1mcPJUtPgcyJZEbmsG8w22mKOnaoqnV8Arf4rQJI2VsZV-L7fHr4Kl6UD/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -4386,6 +4471,10 @@ async function loadMainState() {
     const loadedEntregas = await gsLoadArray('entregas');
     const loadedOrders   = await gsLoadArray('orders');
     const loadedVal      = await gsLoadArray('val_alerts');
+
+    // Carrega vínculos e fatores do GAS (compartilhados entre computadores)
+    await loadVincFromGAS();
+    await loadFatFromGAS();
 
     // ── PRODUTOS ────────────────────────────────────────────────────────────────
     // Estratégia delta: PRODUCTS_RAW (677 itens) é a base hardcoded no HTML.
@@ -4924,38 +5013,33 @@ async function confirmarImportacaoPlanilha() {
 
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
-  const PLANILHA_KEY = 'estoque_planilha_14042026_v1';
-  // Só executa uma vez — verifica tanto localStorage quanto movimentos já existentes
-  if(localStorage.getItem(PLANILHA_KEY)) return;
-  // Se já existem movimentos de carga inicial no banco, não limpar novamente
-  const jaTemCargaInicial = movimentos.some(m => m.obs && m.obs.includes('Saldo inicial importado'));
-  if(jaTemCargaInicial) {
-    localStorage.setItem(PLANILHA_KEY, '1'); // sincroniza o flag local
-    return;
-  }
+  // CRÍTICO: usa movimentos do GAS como fonte autoritativa — não localStorage
+  // Se já existem movimentos de carga inicial no GAS (qualquer computador já importou),
+  // não importa de novo
+  const jaTemCargaInicial = movimentos.some(m => m.obs && (
+    m.obs.includes('Saldo inicial importado') ||
+    m.obs.includes('carga inicial')
+  ));
+  if(jaTemCargaInicial) return; // GAS já tem — não duplicar
+  if(movimentos.length > 0) return; // já tem movimentos de qualquer tipo — não sobreescrever
 
   const dadosPlanilha = [{"material": "ACIDO URSODESOXICOLICO 150 MG", "cod_bionexo": "HLR166", "qty": 60}, {"material": "AAS 100MG CP", "cod_bionexo": "43", "qty": 500}, {"material": "ACICLOVIR 200 CP", "cod_bionexo": "1", "qty": 60}, {"material": "ALBENDAZOL 400MG", "cod_bionexo": "1714", "qty": 10}, {"material": "ALOPURINOL 100MG CP", "cod_bionexo": "1540", "qty": 60}, {"material": "AMIODARONA CLORIDRATO 200MG CP", "cod_bionexo": "215", "qty": 100}, {"material": "AMOXICILINA 500MG + CLAVULANATO 125MG COMP", "cod_bionexo": "24536", "qty": 12}, {"material": "AMOXICILINA 500MG CAP", "cod_bionexo": "5", "qty": 42}, {"material": "ANLODIPINO BESILATO 5MG CP", "cod_bionexo": "1507", "qty": 90}, {"material": "ATENOLOL 50MG CP", "cod_bionexo": "1542", "qty": 120}, {"material": "AZITROMICINA 500MG CP", "cod_bionexo": "2093", "qty": 70}, {"material": "BISACODIL 5MG CP", "cod_bionexo": "258", "qty": 160}, {"material": "CAPTOPRIL 25MG CP", "cod_bionexo": "241", "qty": 630}, {"material": "CAPTOPRIL 50MG COMP", "cod_bionexo": "HLR330", "qty": 30}, {"material": "CARBONATO DE CALCIO 600MG", "cod_bionexo": "CARBONATODECALCIO", "qty": 120}, {"material": "CARVEDILOL 3,125MG CP", "cod_bionexo": "22057", "qty": 30}, {"material": "CARVEDILOL 6,25 CP", "cod_bionexo": "20823", "qty": 90}, {"material": "CETOPROFENO 50MG CAPS", "cod_bionexo": "CB11", "qty": 48}, {"material": "CILOSTAZOL 50MG CP", "cod_bionexo": "1573", "qty": 180}, {"material": "CLONIDINA CLORIDRATO 150MCG CP", "cod_bionexo": "293", "qty": 60}, {"material": "COLCHICINA 0,5MG COMP", "cod_bionexo": "HRES 28", "qty": 60}, {"material": "DEXAMETASONA 4MG CP", "cod_bionexo": "1715", "qty": 140}, {"material": "DICLOFENACO DE SODIO 50MG CP", "cod_bionexo": "272", "qty": 40}, {"material": "DIGOXINA 0,25MG CP", "cod_bionexo": "243", "qty": 40}, {"material": "DIPIRONA SODICA 500MG CP", "cod_bionexo": "48", "qty": 240}, {"material": "DOXASOZINA 2MG CP", "cod_bionexo": "249446", "qty": 60}, {"material": "ENALAPRIL MALEATO 10MG CP", "cod_bionexo": "246", "qty": 280}, {"material": "ENALAPRIL MALEATO 20MG CP", "cod_bionexo": "1623", "qty": 160}, {"material": "ESCOPOLAMINA (HIOSCINA) 10MG CP", "cod_bionexo": "138", "qty": 160}, {"material": "ESPIRONOLACTONA 25MG CP", "cod_bionexo": "295", "qty": 90}, {"material": "FLUCONAZOL 150MG CAP", "cod_bionexo": "1961", "qty": 92}, {"material": "FUROSEMIDA 40MG CP", "cod_bionexo": "299", "qty": 180}, {"material": "GLIBENCLAMIDA 5MG CP", "cod_bionexo": "620", "qty": 560}, {"material": "HIDRALAZINA 25MG COMP", "cod_bionexo": "21353", "qty": 100}, {"material": "HIDRALAZINA CLORIDRATO 50MG CP", "cod_bionexo": "533", "qty": 120}, {"material": "ISOSSORBIDA DINITRATO 10MG", "cod_bionexo": "249", "qty": 90}, {"material": "IVERMECTINA 6MG CP", "cod_bionexo": "270", "qty": 24}, {"material": "LEVOTIROXINA (T4) 100MCG CP", "cod_bionexo": "HRES 33", "qty": 90}, {"material": "LEVOTIROXINA (T4) 25MCG CP", "cod_bionexo": "298", "qty": 60}, {"material": "LOPERAMIDA 2MG CP", "cod_bionexo": "622", "qty": 60}, {"material": "LORATADINA 10MG COMP", "cod_bionexo": "23184", "qty": 80}, {"material": "METFORMINA 500MG COMP", "cod_bionexo": "8890", "qty": 90}, {"material": "METFORMINA 850MG CP", "cod_bionexo": "1411", "qty": 130}, {"material": "METILDOPA 250MG CP", "cod_bionexo": "253", "qty": 150}, {"material": "METOCLOPRAMIDA CLORIDRATO 10MG CP", "cod_bionexo": "202", "qty": 140}, {"material": "METOPROLOL TARTARATO 100MG CP", "cod_bionexo": "24643", "qty": 60}, {"material": "NIFEDIPINA 10MG CP", "cod_bionexo": "234", "qty": 30}, {"material": "NITROFURANTOINA 100MG CP", "cod_bionexo": "21348", "qty": 28}, {"material": "OMEPRAZOL 20MG CAP", "cod_bionexo": "204", "qty": 224}, {"material": "PARACETAMOL 750MG CP", "cod_bionexo": "HLR1398", "qty": 60}, {"material": "PREDNISONA 20MG CP", "cod_bionexo": "307", "qty": 60}, {"material": "PREDNISONA 5MG CP", "cod_bionexo": "21728", "qty": 40}, {"material": "PROMETAZINA CLORIDRATO 25MG CP", "cod_bionexo": "301", "qty": 80}, {"material": "PROPRANOLOL CLORIDRATO 40MG CP", "cod_bionexo": "257", "qty": 100}, {"material": "RIVAROXABANA 15 MG, CP", "cod_bionexo": "23949", "qty": 60}, {"material": "SIMETICONA 40MG COMP", "cod_bionexo": "HRES 108", "qty": 160}, {"material": "SULFAMETOXAZOL 400MG + TRIMETOPRIMA 80MG CP", "cod_bionexo": "12", "qty": 40}, {"material": "TIAMINA (VIT B1) 300MG CP", "cod_bionexo": "26159", "qty": 60}, {"material": "VARFARINA 5MG CP", "cod_bionexo": "20451", "qty": 60}, {"material": "VERAPAMIL CLORIDRATO 80MG CP", "cod_bionexo": "221", "qty": 90}, {"material": "VITAMINA COMPLEXO B DRG", "cod_bionexo": "154", "qty": 100}, {"material": "Apixabana 5 mg, cp", "cod_bionexo": "HLR342", "qty": 60}];
 
   // CORRIGIDO: só cria carga inicial se movimentos realmente estiverem vazios após load do GAS
-  if(movimentos.length > 0) {
-    localStorage.setItem(PLANILHA_KEY, '1');
-    return;
-  }
+  if(movimentos.length > 0) return;
 
   // Para cada item da planilha, cria um movimento de entrada com a quantidade correta
   const hoje = '2026-04-14';
+  const novosMov = [];
   dadosPlanilha.forEach(item => {
-    // Busca produto pelo cod_bionexo (mais confiável)
-    let prod = products.find(p => p.cod_bionexo && 
+    let prod = products.find(p => p.cod_bionexo &&
       p.cod_bionexo.toString().trim().toLowerCase() === item.cod_bionexo.toLowerCase());
-    // Fallback: busca pelo nome
     if(!prod) {
-      prod = products.find(p => p.material && 
+      prod = products.find(p => p.material &&
         p.material.trim().toLowerCase() === item.material.toLowerCase());
     }
     if(!prod || !item.qty || item.qty <= 0) return;
-
-    movimentos.push({
+    const mov = {
       id: Date.now() + Math.random(),
       tipo: 'entrada',
       prod_id: prod.id,
@@ -4964,13 +5048,14 @@ function carregarEstoquePlanilha() {
       resp: 'Carga Inicial — Planilha 14/04/2026',
       obs: 'Saldo inicial importado da planilha de estoque',
       saldo_apos: item.qty
-    });
+    };
+    movimentos.push(mov);
+    novosMov.push(mov);
   });
 
-  // (proteção _lastMovSaveTime removida — desnecessária com nova estratégia de save)
-  localStorage.setItem(PLANILHA_KEY, '1');
-  saveMainState(true);
-  console.log('Estoque carregado da planilha: ' + movimentos.length + ' itens.');
+  // Salva cada movimento no GAS (compartilhado entre computadores)
+  novosMov.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
+  console.log('Carga inicial importada: ' + novosMov.length + ' itens salvos no GAS.');
 }
 
 // ── LIMPEZA DE MOVIMENTOS DUPLICADOS ─────────────────────────────────────────
@@ -7483,6 +7568,7 @@ window.enviarOCFornecedor = async function(ocId) {
       action:       'sendOCEmail',
       to_email:     email,
       to_name:      oc.fornecedor,
+      oc_id:        String(oc.id),
       oc_numero:    oc.numero,
       oc_data:      formatarData(oc.data),
       cond_pgto:    oc.cond_pgto || 'A combinar',
@@ -7497,19 +7583,27 @@ window.enviarOCFornecedor = async function(ocId) {
     };
 
     showLoading('Enviando OC ao fornecedor...');
-    const resp = await fetch(GS_API, { method: 'POST', body: JSON.stringify(gasPayload) });
-    const res  = await resp.json();
+    // CRÍTICO: GAS não processa POST cross-origin (302 redirect perde o body).
+    // Usa GET com payload em base64 — mesmo padrão de gsInsert/gsUpdate.
+    const b64Payload = encodeURIComponent(_toB64(JSON.stringify(gasPayload)));
+    const sendUrl = `${GS_API}?action=sendOCEmail&data=${b64Payload}&enc=b64`;
+    const resp = await _gasFetch(sendUrl);
     hideLoading();
 
-    if (res && res.success) {
+    if (resp && resp.success) {
       const ocSalva = window._ocList.find(x => x.id === oc.id);
-      if (ocSalva) { ocSalva.status = 'enviada'; ocSalva.enviada_em = new Date().toISOString(); }
-      window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
+      if (ocSalva) {
+        ocSalva.status = 'enviada';
+        ocSalva.enviada_em = new Date().toISOString();
+        ocSalva.emailStatus = 'enviado';
+        // CRÍTICO: salva apenas esta OC (não toda a lista)
+        await _saveOCDirect(ocSalva).catch(()=>{});
+      }
       fecharModalOC();
       renderOCPage();
       if (window.toast) window.toast(`📧 OC ${oc.numero} enviada para ${email} com PDF anexado!`, 'success');
     } else {
-      const motivo = (res && res.error) ? res.error : 'Erro desconhecido';
+      const motivo = (resp && resp.error) ? resp.error : 'Erro desconhecido';
       if (window.toast) window.toast(`⚠️ Falha ao enviar: ${motivo}`, 'error');
     }
   } catch(err) {
@@ -7788,7 +7882,6 @@ async function carregarOCSalvas() {
     const salvas = await window.gsLoadArray('oc_list');
     if (Array.isArray(salvas) && salvas.length > 0) {
       window._ocList = salvas.map(oc => {
-        // Parseia json se vier como row bruto do GAS
         const parsed = _parseGASRow(oc);
         return {
           ...parsed,
@@ -7798,6 +7891,11 @@ async function carregarOCSalvas() {
         };
       });
       dedupOCList();
+      // CRÍTICO: inicializa o set de IDs conhecidos para _saveOCDirect saber
+      // se deve usar gsInsert (novo) ou gsUpdate (existente)
+      window._knownGASOCIds = new Set(window._ocList.map(oc => String(oc.id)));
+    } else {
+      window._knownGASOCIds = new Set();
     }
     // Carrega status de leitura dos e-mails
     await _carregarStatusEmailOC();
