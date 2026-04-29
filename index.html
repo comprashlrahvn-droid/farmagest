@@ -3992,7 +3992,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycby_xaf_ImhKpDgkjJTIJCUvObITXQJP3rQi13lD9a5kHMGndjDLVrfEawoyVARYMdOm/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbyCmUevS49svSsoau38d3U9SzTtvqIqO-3FkTAsRJUInMVvlsz5CFUrmlZME4CDUmXL/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -4029,13 +4029,26 @@ window._testarGASNoLogin = function() {
 };
 
 async function gsGetAll(sheet, force=false) {
-  if(!gsCache[sheet]||force) {
-    try {
-      const r = await fetch(`${GS_API}?action=getAll&sheet=${sheet}`);
-      gsCache[sheet] = await r.json();
-    } catch(e) { gsCache[sheet] = []; }
+  if(!gsCache[sheet] || force) {
+    // 3 tentativas com espera progressiva — GAS tem cold start de 2-5s
+    for(let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const r = await fetch(`${GS_API}?action=getAll&sheet=${encodeURIComponent(sheet)}`, { redirect: 'follow' });
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        if(Array.isArray(data)) {
+          gsCache[sheet] = data;
+          break;
+        }
+        throw new Error('resposta inválida: ' + JSON.stringify(data).substring(0, 80));
+      } catch(e) {
+        console.warn(`gsGetAll(${sheet}) tentativa ${attempt}/3:`, e.message || e);
+        if(attempt < 3) await new Promise(r => setTimeout(r, 2000 * attempt));
+        else gsCache[sheet] = [];
+      }
+    }
   }
-  return gsCache[sheet]||[];
+  return gsCache[sheet] || [];
 }
 // CORREÇÃO CRÍTICA: GAS redireciona POST cross-origin para GET (302 redirect),
 // perdendo o body da requisição. Solução: usar GET com dados na URL em base64.
@@ -4460,11 +4473,54 @@ async function _doSaveMainState() {
   finally { _isSavingNow = false; }
 }
 
+// Fallback de emergência quando GAS não responde — usa dados locais do navegador
+function _loadFromLocalStorage() {
+  try {
+    const bkpProd = JSON.parse(localStorage.getItem('fg_products_backup') || 'null');
+    if(Array.isArray(bkpProd) && bkpProd.length > 0) products = bkpProd;
+    else products = JSON.parse(JSON.stringify(PRODUCTS_RAW));
+    const bkpNF = JSON.parse(localStorage.getItem('fg_nfhist_backup') || 'null');
+    if(Array.isArray(bkpNF)) nfHistory = bkpNF;
+    const bkpMov = JSON.parse(localStorage.getItem('fg_movimentos_backup') || 'null');
+    if(Array.isArray(bkpMov)) movimentos = bkpMov;
+    const bkpOrd = JSON.parse(localStorage.getItem('fg_orders_backup') || 'null');
+    if(Array.isArray(bkpOrd)) { purchaseOrders = bkpOrd; window.purchaseOrders = purchaseOrders; }
+  } catch(e) { console.warn('_loadFromLocalStorage error:', e); }
+  try { renderDashboard(); renderProdutos(); renderNFHistorico(); renderOrders();
+    renderRecebimento(); renderEntregas(); renderEstoque(); renderMovimentos(); updateCriticosBadge(); } catch(e) {}
+}
+
 async function loadMainState() {
   try {
-    // CARREGA SEQUENCIALMENTE — o GAS nao suporta multiplas requisicoes paralelas.
-    // Promise.all paralelo causava falhas silenciosas onde algumas abas retornavam null,
-    // fazendo o app cair no fallback do localStorage (vazio em outro computador).
+    // ── TESTE DE CONECTIVIDADE ────────────────────────────────────────────────
+    // Verifica se o GAS responde ANTES de carregar qualquer dado.
+    // Se falhar, mostra aviso claro ao usuário (não cai silenciosamente no localStorage).
+    let gasOk = false;
+    for(let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        showLoading(`Conectando ao banco de dados (tentativa ${attempt}/4)...`);
+        const r = await fetch(`${GS_API}?action=test`, { redirect: 'follow' });
+        if(r.ok) {
+          const d = await r.json();
+          if(d && d.status === 'ok') { gasOk = true; break; }
+        }
+      } catch(e) {}
+      if(attempt < 4) await new Promise(r => setTimeout(r, 2500));
+    }
+
+    if(!gasOk) {
+      hideLoading();
+      // Mostra aviso mas continua com localStorage
+      const aviso = document.createElement('div');
+      aviso.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;padding:12px 20px;text-align:center;font-size:0.9rem;font-weight:bold';
+      aviso.innerHTML = '⚠️ Banco de dados inacessível — exibindo dados locais deste computador. Verifique a URL do GAS no sistema. <button onclick="location.reload()" style="margin-left:12px;padding:4px 12px;background:#fff;color:#c0392b;border:none;border-radius:4px;cursor:pointer;font-weight:bold">Tentar novamente</button>';
+      document.body.prepend(aviso);
+      // Usa localStorage como fallback temporário
+      _loadFromLocalStorage();
+      return;
+    }
+
+    showLoading('Carregando dados do banco...');
     const loadedProducts = await gsLoadArray('products');
     const loadedNF       = await gsLoadArray('nf_history');
     const loadedMov      = await gsLoadArray('movimentos');
@@ -4653,11 +4709,13 @@ const LOCAL_USERS = [
 // Sem isso, x.email === undefined em todo o codigo de auth e renderizacao.
 function _parseUserRow(row) {
   if (!row) return row;
-  if (row.email || row.name) return row; // LOCAL_USERS ja tem campos no topo
+  // LOCAL_USERS: array hardcoded sem campo json — retorna direto
+  if (!row.json && (row.email || row.name)) return row;
+  // Rows do GAS: dados dentro do campo json — sempre parseia
   if (row.json) {
     try {
       const parsed = JSON.parse(row.json);
-      return { ...parsed, id: row.id }; // id da linha e sempre autoritativo
+      return { ...parsed, id: row.id || parsed.id };
     } catch(e) {}
   }
   return row;
@@ -4668,14 +4726,16 @@ function _parseUserRow(row) {
 // Dados ficam serializados dentro da coluna "json" e precisam ser extraídos ao ler.
 function _parseGASRow(row) {
   if (!row) return row;
-  // Se já tem campos de negócio diretamente (ex: dados já parseados ou LOCAL_USERS), retorna direto
-  if (row.name || row.email || row.resultado || row.supplierName || row.nf || row.status) return row;
+  // REGRA: se tem campo json, parseia SEMPRE — os dados reais estão lá dentro
+  // (OCs têm status mas os dados ficam em json; confiar em campos de superfície causa perda de dados)
   if (row.json) {
     try {
       const parsed = JSON.parse(row.json);
+      // id da linha GAS é sempre autoritativo
       return { ...parsed, id: row.id || parsed.id };
     } catch(e) {}
   }
+  // Sem json: row já veio parseado (LOCAL_USERS, conferências salvas no formato antigo, etc.)
   return row;
 }
 
@@ -7551,11 +7611,32 @@ window.enviarOCFornecedor = async function(ocId) {
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
 
-  showLoading('Enviando OC ao fornecedor...');
+  showLoading('Gerando PDF da OC...');
   try {
-    // SOLUÇÃO: envia metadados via GET (sem PDF — PDF é muito grande para URL).
-    // O PDF fica disponível para download local pelo botão "⬇️ PDF".
-    // O e-mail contém todos os dados da OC e o botão de confirmação de recebimento.
+    // 1. Gera PDF
+    const pdfBlob = await _gerarPDFBlob(oc);
+    const base64Full = await _blobParaBase64(pdfBlob);
+    const _nomeForn = (oc.fornecedor||'Fornecedor').replace(/[^a-zA-ZÀ-ÿ0-9\s]/g,'').trim().substring(0,40);
+    const _data = oc.data ? new Date(oc.data+'T12:00:00') : new Date();
+    const _ddmm = String(_data.getDate()).padStart(2,'0')+String(_data.getMonth()+1).padStart(2,'0')+_data.getFullYear();
+    const nomePDF = `OC ${_nomeForn} ${_ddmm}.pdf`;
+    const pdfKey = 'pdf_' + oc.id + '_' + Date.now();
+
+    // 2. Envia PDF em chunks de 4000 chars para o GAS armazenar temporariamente
+    // Base64 de 4000 chars ≈ 3KB — bem dentro do limite de URL do GAS
+    const CHUNK = 4000;
+    const total = Math.ceil(base64Full.length / CHUNK);
+    showLoading(`Enviando PDF (${total} partes)...`);
+    for (let i = 0; i < total; i++) {
+      const chunk = base64Full.substring(i * CHUNK, (i + 1) * CHUNK);
+      const chunkPayload = { key: pdfKey, chunk: i, total, data: chunk };
+      const b64c = encodeURIComponent(_toB64(JSON.stringify(chunkPayload)));
+      const res = await _gasFetch(`${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`);
+      if (!res || res.error) throw new Error('Falha ao enviar chunk ' + i + ': ' + (res && res.error));
+    }
+
+    // 3. Dispara o envio do e-mail com o PDF já armazenado no GAS
+    showLoading('Enviando e-mail ao fornecedor...');
     const gasPayload = {
       to_email:     email,
       to_name:      oc.fornecedor,
@@ -7568,12 +7649,11 @@ window.enviarOCFornecedor = async function(ocId) {
       total_geral:  fmtBRL(oc.total || 0),
       obs:          oc.obs || '',
       from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
-      forn_cnpj:    oc.forn_cnpj || ''
+      pdf_key:      pdfKey,
+      pdf_nome:     nomePDF
     };
-
-    const b64Payload = encodeURIComponent(_toB64(JSON.stringify(gasPayload)));
-    const sendUrl = `${GS_API}?action=sendOCEmail&data=${b64Payload}&enc=b64`;
-    const resp = await _gasFetch(sendUrl);
+    const b64p = encodeURIComponent(_toB64(JSON.stringify(gasPayload)));
+    const resp = await _gasFetch(`${GS_API}?action=sendOCEmail&data=${b64p}&enc=b64`);
     hideLoading();
 
     if (resp && resp.success) {
@@ -7586,11 +7666,10 @@ window.enviarOCFornecedor = async function(ocId) {
       }
       fecharModalOC();
       renderOCPage();
-      toast(`📧 OC ${oc.numero} enviada para ${email}!\n💡 Para enviar o PDF, use o botão ⬇️ PDF e anexe manualmente ao e-mail.`, 'success');
+      toast(`📧 OC ${oc.numero} enviada com PDF para ${email}!`, 'success');
     } else {
       const motivo = (resp && resp.error) ? resp.error : 'Sem resposta do servidor';
       toast(`⚠️ Falha ao enviar e-mail: ${motivo}`, 'error');
-      // Fallback: abre cliente de e-mail local
       _enviarOCViaMailto(oc, email, itensTexto);
     }
   } catch(err) {
