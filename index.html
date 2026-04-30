@@ -3992,7 +3992,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbyCmUevS49svSsoau38d3U9SzTtvqIqO-3FkTAsRJUInMVvlsz5CFUrmlZME4CDUmXL/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbxmCiUy6E3h1hwAAKHX04maiUs97LYm_ID5E4VS7G-8Mqg_wR0c-htWqRiaFWR0ppJM/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -7626,28 +7626,24 @@ window.enviarOCFornecedor = async function(ocId) {
     const nomePDF = `OC ${_nomeForn} ${_ddmm}.pdf`;
     const pdfKey = 'pdf_' + oc.id + '_' + Date.now();
 
-    // 2. Envia PDF em chunks de 20.000 chars em lotes paralelos de 5
-    // 20KB/chunk → PDF de 200KB = 10 chunks → 2 lotes de 5 requisições paralelas
-    const CHUNK = 20000;
+    // 2. Envia PDF em chunks sequenciais de 5000 chars
+    // Limite URL GAS ≈ 8KB. JSON do chunk ≈ 5100 chars → base64 ≈ 6800 chars → URL ≈ 7KB ✓
+    // Envio sequencial evita race conditions de escrita simultânea no GAS
+    const CHUNK = 5000;
     const chunks = [];
     for(let i = 0; i < base64Full.length; i += CHUNK) {
       chunks.push(base64Full.substring(i, i + CHUNK));
     }
     const total = chunks.length;
-    showLoading(`Enviando PDF (${total} partes)...`);
-
-    // Envia em lotes de 5 paralelos
-    const BATCH = 5;
-    for(let b = 0; b < total; b += BATCH) {
-      const lote = chunks.slice(b, b + BATCH);
-      const resultados = await Promise.all(lote.map((chunk, idx) => {
-        const chunkPayload = { key: pdfKey, chunk: b + idx, total, data: chunk };
-        const b64c = encodeURIComponent(_toB64(JSON.stringify(chunkPayload)));
-        return _gasFetch(`${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`);
-      }));
-      // Verifica erros no lote
-      const erro = resultados.find(r => !r || r.error);
-      if(erro) throw new Error('Falha ao enviar chunk: ' + (erro && erro.error ? erro.error : 'sem resposta'));
+    showLoading(`Enviando PDF ao servidor (0/${total})...`);
+    for(let i = 0; i < total; i++) {
+      showLoading(`Enviando PDF ao servidor (${i+1}/${total})...`);
+      const chunkPayload = { key: pdfKey, chunk: i, total, data: chunks[i] };
+      const b64c = encodeURIComponent(_toB64(JSON.stringify(chunkPayload)));
+      const res = await _gasFetch(`${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`);
+      if (!res || res.error) {
+        throw new Error(`Chunk ${i+1}/${total} falhou: ${res ? res.error : 'sem resposta do servidor'}`);
+      }
     }
 
     // 3. Dispara o envio do e-mail com o PDF já armazenado no GAS
@@ -7890,37 +7886,35 @@ function iniciarSincronizacao() {
 
 async function sincronizarDados() {
   if (!window.gsLoadArray || !window.currentUser) return;
-  if (window._isSavePending && window._isSavePending()) return; // bloqueia durante save em andamento
+  if (window._isSavePending && window._isSavePending()) return;
   if (window._produtosSendoSalvos) return;
-  // Nao sincroniza se houve save local nos últimos 30s — janela ampliada para saves sequenciais
   const saveRecente = window._lastSaveCompleteTime && (Date.now() - window._lastSaveCompleteTime < 30000);
   if (saveRecente) return;
-  // CORRECAO: nao sincroniza OCs se houve save local recente (janela de 15s)
-  // para evitar que o servidor retorne dados antigos e sobrescreva saves locais.
   const ocSaveRecente = window._lastOCSaveTime && (Date.now() - window._lastOCSaveTime < 15000);
   try {
     await window.loadMainState();
-    const ocsSalvas = await window.gsLoadArray('oc_list');
-    if (Array.isArray(ocsSalvas) && ocsSalvas.length > 0) {
-      if (!ocSaveRecente) {
-        // CORRECAO: merge inteligente — preserva OCs locais que o servidor ainda
-        // nao conhece (id nao presente no remoto) para nao perder saves recentes.
-        const remoteIds = new Set(ocsSalvas.map(function(o) { return o.id; }));
-        const localOnly = (window._ocList || []).filter(function(o) { return !remoteIds.has(o.id); });
-        window._ocList = ocsSalvas.concat(localOnly);
+    // OCs — aplica _parseGASRow e expande itens antes de usar
+    if (!ocSaveRecente) {
+      const ocsSalvas = await window.gsLoadArray('oc_list');
+      if (Array.isArray(ocsSalvas) && ocsSalvas.length > 0) {
+        const parsedOCs = ocsSalvas.map(_parseGASRow).map(oc => {
+          if (!oc || !oc.id) return null;
+          if (typeof oc.itens === 'string') { try { oc.itens = JSON.parse(oc.itens); } catch(e){ oc.itens=[]; } }
+          else if (!oc.itens) oc.itens = [];
+          return oc;
+        }).filter(Boolean);
+        const remoteIds = new Set(parsedOCs.map(o => String(o.id)));
+        const localOnly = (window._ocList || []).filter(o => !remoteIds.has(String(o.id)));
+        window._ocList = parsedOCs.concat(localOnly);
+        window._knownGASOCIds = new Set(parsedOCs.map(o => String(o.id)));
+        dedupOCList();
       }
     }
     const pageOC = document.getElementById('page-oc');
-    if (pageOC && pageOC.classList.contains('active')) {
-      renderOCPage();
-    }
+    if (pageOC && pageOC.classList.contains('active')) renderOCPage();
     const pageDash = document.getElementById('page-dashboard');
-    if (pageDash && pageDash.classList.contains('active') && window.renderDashboard) {
-      window.renderDashboard();
-    }
-  } catch(e) {
-    // Silencioso — nao interrompe o uso offline
-  }
+    if (pageDash && pageDash.classList.contains('active') && window.renderDashboard) window.renderDashboard();
+  } catch(e) {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
