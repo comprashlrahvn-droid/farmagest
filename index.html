@@ -4657,29 +4657,33 @@ async function loadMainState() {
       validadeAlerts = loadedVal.map(_parseGASRow);
     }
 
-    // Carrega OCs salvas
+    // Carrega OCs — parse correto via _parseGASRow
     try {
       const loadedOCs = await gsLoadArray('oc_list');
       if(Array.isArray(loadedOCs) && loadedOCs.length > 0) {
         const statusPrio={enviada:4,atendida:3,parcial:2,rascunho:1,cancelada:0};
-        // Deduplica por NUMERO (chave de negócio), mantendo status mais avançado
         const ocMap={};
-        loadedOCs.forEach(oc=>{
-          const parsed={...oc,itens:typeof oc.itens==='string'?(() => { try { return JSON.parse(oc.itens); } catch(e){ return []; } })():(oc.itens||[])};
-          const chave=(parsed.numero||parsed.id||'').toString().trim();
-          const existing=ocMap[chave];
-          if(!existing||(statusPrio[parsed.status]||0)>(statusPrio[existing.status]||0)){
-            ocMap[chave]=parsed;
+        loadedOCs.map(_parseGASRow).forEach(oc=>{
+          if(!oc || !oc.id) return;
+          // Expande itens se vier como string serializada
+          if(typeof oc.itens === 'string') {
+            try { oc.itens = JSON.parse(oc.itens); } catch(e){ oc.itens=[]; }
+          } else if(!oc.itens) { oc.itens=[]; }
+          const chave = (oc.numero||oc.id||'').toString().trim();
+          const existing = ocMap[chave];
+          if(!existing||(statusPrio[oc.status]||0)>=(statusPrio[existing.status]||0)){
+            ocMap[chave] = oc;
           }
         });
-        window._ocList=Object.values(ocMap);
-        // Persiste já limpa para o GAS para corrigir a planilha
-        if(window.gsSaveArray && window._ocList.length>0){
-          const ocsSer=window._ocList.map(oc=>({...oc,itens:JSON.stringify(oc.itens||[])}));
-          ocsSer.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
-        }
+        window._ocList = Object.values(ocMap);
+        // Inicializa IDs conhecidos para _saveOCDirect (insert vs update)
+        window._knownGASOCIds = new Set(window._ocList.map(oc => String(oc.id)));
+        console.log('[OC] Carregadas do GAS:', window._ocList.length, 'OCs');
+      } else {
+        window._knownGASOCIds = new Set();
+        console.log('[OC] Nenhuma OC no GAS ainda.');
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[OC] Erro ao carregar OCs:', e); }
 
   } catch(e) { console.warn('loadMainState error:', e); }
 }
@@ -7622,17 +7626,28 @@ window.enviarOCFornecedor = async function(ocId) {
     const nomePDF = `OC ${_nomeForn} ${_ddmm}.pdf`;
     const pdfKey = 'pdf_' + oc.id + '_' + Date.now();
 
-    // 2. Envia PDF em chunks de 4000 chars para o GAS armazenar temporariamente
-    // Base64 de 4000 chars ≈ 3KB — bem dentro do limite de URL do GAS
-    const CHUNK = 4000;
-    const total = Math.ceil(base64Full.length / CHUNK);
+    // 2. Envia PDF em chunks de 20.000 chars em lotes paralelos de 5
+    // 20KB/chunk → PDF de 200KB = 10 chunks → 2 lotes de 5 requisições paralelas
+    const CHUNK = 20000;
+    const chunks = [];
+    for(let i = 0; i < base64Full.length; i += CHUNK) {
+      chunks.push(base64Full.substring(i, i + CHUNK));
+    }
+    const total = chunks.length;
     showLoading(`Enviando PDF (${total} partes)...`);
-    for (let i = 0; i < total; i++) {
-      const chunk = base64Full.substring(i * CHUNK, (i + 1) * CHUNK);
-      const chunkPayload = { key: pdfKey, chunk: i, total, data: chunk };
-      const b64c = encodeURIComponent(_toB64(JSON.stringify(chunkPayload)));
-      const res = await _gasFetch(`${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`);
-      if (!res || res.error) throw new Error('Falha ao enviar chunk ' + i + ': ' + (res && res.error));
+
+    // Envia em lotes de 5 paralelos
+    const BATCH = 5;
+    for(let b = 0; b < total; b += BATCH) {
+      const lote = chunks.slice(b, b + BATCH);
+      const resultados = await Promise.all(lote.map((chunk, idx) => {
+        const chunkPayload = { key: pdfKey, chunk: b + idx, total, data: chunk };
+        const b64c = encodeURIComponent(_toB64(JSON.stringify(chunkPayload)));
+        return _gasFetch(`${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`);
+      }));
+      // Verifica erros no lote
+      const erro = resultados.find(r => !r || r.error);
+      if(erro) throw new Error('Falha ao enviar chunk: ' + (erro && erro.error ? erro.error : 'sem resposta'));
     }
 
     // 3. Dispara o envio do e-mail com o PDF já armazenado no GAS
@@ -7945,25 +7960,27 @@ function dedupOCList() {
 async function carregarOCSalvas() {
   if (!window.gsLoadArray) return;
   try {
+    // Se loadMainState já carregou OCs do GAS, não recarrega (evita sobrescrever)
+    if(window._ocList && window._ocList.length > 0 && window._knownGASOCIds && window._knownGASOCIds.size > 0) {
+      console.log('[OC] carregarOCSalvas: já carregado pelo loadMainState, pulando.');
+      await _carregarStatusEmailOC();
+      return;
+    }
     const salvas = await window.gsLoadArray('oc_list');
     if (Array.isArray(salvas) && salvas.length > 0) {
       window._ocList = salvas.map(oc => {
         const parsed = _parseGASRow(oc);
-        return {
-          ...parsed,
-          itens: typeof parsed.itens === 'string'
-            ? (() => { try { return JSON.parse(parsed.itens); } catch(e){ return []; } })()
-            : (parsed.itens || [])
-        };
-      });
+        if(typeof parsed.itens === 'string') {
+          try { parsed.itens = JSON.parse(parsed.itens); } catch(e){ parsed.itens=[]; }
+        } else if(!parsed.itens) { parsed.itens=[]; }
+        return parsed;
+      }).filter(oc => oc && oc.id);
       dedupOCList();
-      // CRÍTICO: inicializa o set de IDs conhecidos para _saveOCDirect saber
-      // se deve usar gsInsert (novo) ou gsUpdate (existente)
       window._knownGASOCIds = new Set(window._ocList.map(oc => String(oc.id)));
+      console.log('[OC] carregarOCSalvas: carregadas', window._ocList.length, 'OCs');
     } else {
       window._knownGASOCIds = new Set();
     }
-    // Carrega status de leitura dos e-mails
     await _carregarStatusEmailOC();
   } catch(e) { console.warn('carregarOCSalvas error:', e); }
 }
