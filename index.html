@@ -6985,12 +6985,16 @@ function coletarDadosOC() {
   };
 }
 
-window.salvarOCRascunho = function() {
+window.salvarOCRascunho = async function() {
   const forn = document.getElementById('oc-forn').value.trim();
   if (!forn) { alert('Informe o fornecedor.'); return; }
   const oc = coletarDadosOC();
   oc.status = 'rascunho';
   salvarOC(oc);
+  // CORREÇÃO: atualiza _ocEditingId para que edições subsequentes no mesmo modal
+  // façam update em vez de insert (evita duplicatas se o usuário salva múltiplas vezes)
+  _ocEditingId = oc.id;
+  document.getElementById('oc-edit-id').value = oc.id;
   fecharModalOC();
   renderOCPage();
   if (window.toast) window.toast('💾 Rascunho salvo!', 'success');
@@ -7593,16 +7597,31 @@ window.enviarOCFornecedor = async function(ocId) {
     oc = coletarDadosOC();
     oc.status = 'enviada';
     salvarOC(oc);
+    // CORREÇÃO: atualiza _ocEditingId para que o modal não crie duplicata ao fechar
+    _ocEditingId = oc.id;
   }
   if (!oc) { alert('OC não encontrada.'); return; }
 
   // Busca e-mail do fornecedor
   let email = oc.forn_email || '';
   if (!email) {
+    // CORREÇÃO: garante que fornecedores estão carregados antes de buscar e-mail
+    if ((!window._fornecedores || window._fornecedores.length === 0) && window.loadFornecedoresData) {
+      try { await window.loadFornecedoresData(); } catch(e) {}
+    }
     const forn = (window._fornecedores || []).find(f =>
       (f.name || '').toLowerCase() === (oc.fornecedor || '').toLowerCase()
     );
-    email = forn ? (forn.email || '') : '';
+    // Busca parcial como fallback
+    if (!forn) {
+      const fornParcial = (window._fornecedores || []).find(f =>
+        (oc.fornecedor || '').toLowerCase().includes((f.name || '').toLowerCase()) ||
+        (f.name || '').toLowerCase().includes((oc.fornecedor || '').toLowerCase())
+      );
+      email = fornParcial ? (fornParcial.email || '') : '';
+    } else {
+      email = forn ? (forn.email || '') : '';
+    }
   }
 
   if (!email) {
@@ -7610,10 +7629,12 @@ window.enviarOCFornecedor = async function(ocId) {
     return;
   }
 
-  // Monta lista de itens em texto
+  // Monta lista de itens em texto (limitado para não estourar URL do GAS)
   const itensTexto = oc.itens.map((it, i) =>
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
+  // CORREÇÃO: trunca itensTexto para evitar estouro de URL no GAS (limite ~6KB para este campo)
+  const itensTextoTrunc = itensTexto.length > 2000 ? itensTexto.substring(0, 2000) + '\n...(lista truncada — ver PDF em anexo)' : itensTexto;
 
   showLoading('Gerando PDF da OC...');
   try {
@@ -7656,7 +7677,7 @@ window.enviarOCFornecedor = async function(ocId) {
       oc_data:      formatarData(oc.data),
       cond_pgto:    oc.cond_pgto || 'A combinar',
       prev_entrega: oc.prev_entrega ? formatarData(oc.prev_entrega) : 'A combinar',
-      itens_lista:  itensTexto,
+      itens_lista:  itensTextoTrunc,
       total_geral:  fmtBRL(oc.total || 0),
       obs:          oc.obs || '',
       from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova',
@@ -7668,12 +7689,19 @@ window.enviarOCFornecedor = async function(ocId) {
     hideLoading();
 
     if (resp && resp.success) {
+      // CORREÇÃO: atualiza o objeto oc local E o da lista (podem ser referências diferentes)
+      oc.status = 'enviada';
+      oc.enviada_em = new Date().toISOString();
+      oc.emailStatus = 'enviado';
       const ocSalva = window._ocList.find(x => x.id === oc.id);
       if (ocSalva) {
         ocSalva.status = 'enviada';
-        ocSalva.enviada_em = new Date().toISOString();
+        ocSalva.enviada_em = oc.enviada_em;
         ocSalva.emailStatus = 'enviado';
         await _saveOCDirect(ocSalva).catch(()=>{});
+      } else {
+        // OC pode ter sido criada agora — salva direto o objeto local
+        await _saveOCDirect(oc).catch(()=>{});
       }
       fecharModalOC();
       renderOCPage();
@@ -7681,13 +7709,13 @@ window.enviarOCFornecedor = async function(ocId) {
     } else {
       const motivo = (resp && resp.error) ? resp.error : 'Sem resposta do servidor';
       toast(`⚠️ Falha ao enviar e-mail: ${motivo}`, 'error');
-      _enviarOCViaMailto(oc, email, itensTexto);
+      _enviarOCViaMailto(oc, email, itensTextoTrunc);
     }
   } catch(err) {
     hideLoading();
     console.error('Erro ao gerar/enviar PDF:', err);
     if (window.toast) window.toast('⚠️ Erro ao gerar PDF. Usando fallback de e-mail.', 'error');
-    _enviarOCViaMailto(oc, email, itensTexto);
+    _enviarOCViaMailto(oc, email, itensTextoTrunc);
   }
 };
 
@@ -7848,16 +7876,23 @@ window.editarOC = async function(id) {
 window.cancelarOC = function(id) {
   if (!confirm('Cancelar esta OC?')) return;
   const oc = window._ocList.find(x => x.id === id);
-  if (oc) { oc.status = 'cancelada'; }
-  window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
+  if (oc) {
+    oc.status = 'cancelada';
+    _saveOCDirect(oc).catch(()=>{});
+  }
   renderOCPage();
   if (window.toast) window.toast('OC cancelada.', 'warning');
 };
 
-window.excluirOC = function(id) {
+window.excluirOC = async function(id) {
   if (!confirm('Excluir esta OC permanentemente? Esta ação não pode ser desfeita.')) return;
+  // CORREÇÃO: deleta do GAS antes de remover da lista local
+  // Sem isso, a OC reaparecia ao recarregar (GAS ainda a tinha)
+  try {
+    await gsDelete('oc_list', id);
+    if (window._knownGASOCIds) window._knownGASOCIds.delete(String(id));
+  } catch(e) { console.warn('excluirOC: erro ao deletar do GAS:', e); }
   window._ocList = (window._ocList || []).filter(x => x.id !== id);
-  window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
   renderOCPage();
   if (window.toast) window.toast('OC excluída.', 'danger');
 };
@@ -7986,13 +8021,27 @@ async function _carregarStatusEmailOC() {
     if (!Array.isArray(rows) || !rows.length) return;
     // Mapa: oc_id → { status, data }
     const statusMap = {};
-    rows.slice(1).forEach(r => { // pula header
-      const vals = Array.isArray(r) ? r : Object.values(r);
-      const ocId = String(vals[0]||'');
-      const status = String(vals[4]||'');
-      const data = String(vals[5]||'');
+    // CORREÇÃO: NÃO usar slice(1) — gsGetAll já retorna sem cabeçalho.
+    // CORREÇÃO: oc_emails_log usa getOrCreateSheet cujas colunas são:
+    //   id=oc_id, json=oc_numero, chunk=to_email, total=timestamp_envio, timestamp=status_email
+    // Usar os campos pelo nome em vez de Object.values (ordem pode variar)
+    rows.forEach(r => {
+      // Suporte a ambos os formatos: objeto com campos nomeados ou array
+      let ocId, status, dataLeitura;
+      if (Array.isArray(r)) {
+        ocId       = String(r[0] || '');
+        status     = String(r[4] || '');
+        dataLeitura= String(r[5] || '');
+      } else {
+        // Campos mapeados conforme estrutura do getOrCreateSheet:
+        // col id → oc_id, col json → oc_numero, col chunk → email,
+        // col total → timestamp_envio, col timestamp → status
+        ocId       = String(r.id        || '');
+        status     = String(r.timestamp || '');  // 5ª coluna = status no oc_emails_log
+        dataLeitura= '';  // 6ª coluna não tem cabeçalho nomeado — não usada aqui
+      }
       if (ocId && (!statusMap[ocId] || status === 'confirmado')) {
-        statusMap[ocId] = { status, data };
+        statusMap[ocId] = { status, data: dataLeitura };
       }
     });
     // Injeta em cada OC
@@ -8004,7 +8053,8 @@ async function _carregarStatusEmailOC() {
       }
     });
     // Re-renderiza painel de OCs se estiver visível
-    if (typeof window.renderizarListaOCs === 'function') window.renderizarListaOCs();
+    const pageOC = document.getElementById('page-oc');
+    if (pageOC && pageOC.classList.contains('active')) renderOCPage();
   } catch(e) { console.warn('_carregarStatusEmailOC error:', e); }
 }
 
