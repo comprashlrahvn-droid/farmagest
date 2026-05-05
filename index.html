@@ -4406,16 +4406,33 @@ async function _saveOrderDirect(order, sheet='orders') {
 // ── Salva UMA OC no GAS ───────────────────────────────────────────────────────
 async function _saveOCDirect(oc) {
   if (!oc || !oc.id) return;
+  // CRÍTICO: serializa itens como string para caber na URL
+  const ser = { ...oc, itens: typeof oc.itens==='string' ? oc.itens : JSON.stringify(oc.itens||[]) };
+  if (!window._knownGASOCIds) window._knownGASOCIds = new Set();
   try {
-    const ser = { ...oc, itens: typeof oc.itens==='string' ? oc.itens : JSON.stringify(oc.itens||[]) };
-    if (!window._knownGASOCIds) window._knownGASOCIds = new Set();
+    let ok = false;
     if (window._knownGASOCIds.has(String(oc.id))) {
-      await gsUpdate('oc_list', oc.id, { json: JSON.stringify(ser) });
+      const res = await gsUpdate('oc_list', oc.id, { json: JSON.stringify(ser) });
+      ok = !!(res && (res.status === 'ok' || res.status === 'not_found'));
+      // Se not_found no GAS (ex: foi deletado manualmente), faz insert
+      if (res && res.status === 'not_found') {
+        window._knownGASOCIds.delete(String(oc.id));
+        const res2 = await gsInsert('oc_list', ser);
+        ok = !!(res2 && res2.status === 'ok');
+        if (ok) window._knownGASOCIds.add(String(oc.id));
+      }
     } else {
       const res = await gsInsert('oc_list', ser);
-      if (res && res.status === 'ok') window._knownGASOCIds.add(String(oc.id));
+      ok = !!(res && res.status === 'ok');
+      if (ok) window._knownGASOCIds.add(String(oc.id));
     }
-    _pendingSaves.ocs.delete(String(oc.id));
+    if (ok) {
+      _pendingSaves.ocs.delete(String(oc.id));
+    } else {
+      // Falha sem exceção (ex: gsInsert retornou null ou erro) → fila para retry
+      _pendingSaves.ocs.set(String(oc.id), oc);
+      console.warn('⚠️ _saveOCDirect: GAS retornou falha para OC', oc.id, '— na fila para retry');
+    }
   } catch(e) {
     _pendingSaves.ocs.set(String(oc.id), oc);
     console.warn('⚠️ Erro ao salvar OC:', e);
@@ -6431,7 +6448,9 @@ function adicionarPaginaOC() {
         <option value="atendida">✅ Atendida</option>
         <option value="cancelada">🚫 Cancelada</option>
       </select>
+      <button onclick="window._diagnosticoOC()" title="Diagnóstico GAS" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:0.8rem;color:var(--text2);">🔧 Diagnóstico</button>
     </div>
+    <div id="oc-save-status" style="display:none;font-size:0.78rem;padding:6px 12px;border-radius:6px;margin-bottom:8px;"></div>
     <div id="oc-list-body">
       <div class="empty-state"><div class="icon">🗂️</div><p>Nenhuma Ordem de Compra. Clique em <b>+ Nova OC</b> para começar.</p></div>
     </div>
@@ -6991,8 +7010,7 @@ window.salvarOCRascunho = async function() {
   const oc = coletarDadosOC();
   oc.status = 'rascunho';
   salvarOC(oc);
-  // CORREÇÃO: atualiza _ocEditingId para que edições subsequentes no mesmo modal
-  // façam update em vez de insert (evita duplicatas se o usuário salva múltiplas vezes)
+  // Atualiza _ocEditingId para que salvamentos subsequentes façam UPDATE, não INSERT
   _ocEditingId = oc.id;
   document.getElementById('oc-edit-id').value = oc.id;
   fecharModalOC();
@@ -7009,7 +7027,13 @@ function salvarOC(oc) {
   }
   // CRÍTICO: salva apenas esta OC individualmente (não toda a lista)
   window._lastOCSaveTime = Date.now();
-  _saveOCDirect(oc).then(() => { window._lastOCSaveTime = Date.now(); }).catch(() => {});
+  // Adiciona na fila visual de pendentes imediatamente para feedback
+  if (window._pendingSaves) window._pendingSaves.ocs.set(String(oc.id), oc);
+  _atualizarOCSaveStatus();
+  _saveOCDirect(oc).then(() => {
+    window._lastOCSaveTime = Date.now();
+    _atualizarOCSaveStatus();
+  }).catch(() => { _atualizarOCSaveStatus(); });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7590,6 +7614,7 @@ window.enviarOCFornecedor = async function(ocId) {
   let oc;
   if (ocId) {
     oc = window._ocList.find(x => x.id === ocId);
+    if (!oc) { alert('OC não encontrada.'); return; }
   } else {
     const forn = document.getElementById('oc-forn').value.trim();
     if (!forn) { alert('Informe o fornecedor.'); return; }
@@ -7597,77 +7622,88 @@ window.enviarOCFornecedor = async function(ocId) {
     oc = coletarDadosOC();
     oc.status = 'enviada';
     salvarOC(oc);
-    // CORREÇÃO: atualiza _ocEditingId para que o modal não crie duplicata ao fechar
+    // CORREÇÃO: atualiza _ocEditingId para evitar insert duplicado ao fechar o modal
     _ocEditingId = oc.id;
   }
-  if (!oc) { alert('OC não encontrada.'); return; }
 
   // Busca e-mail do fornecedor
   let email = oc.forn_email || '';
   if (!email) {
-    // CORREÇÃO: garante que fornecedores estão carregados antes de buscar e-mail
-    if ((!window._fornecedores || window._fornecedores.length === 0) && window.loadFornecedoresData) {
+    // Garante que fornecedores estão carregados
+    if ((!window._fornecedores || !window._fornecedores.length) && window.loadFornecedoresData) {
       try { await window.loadFornecedoresData(); } catch(e) {}
     }
-    const forn = (window._fornecedores || []).find(f =>
-      (f.name || '').toLowerCase() === (oc.fornecedor || '').toLowerCase()
-    );
-    // Busca parcial como fallback
-    if (!forn) {
-      const fornParcial = (window._fornecedores || []).find(f =>
-        (oc.fornecedor || '').toLowerCase().includes((f.name || '').toLowerCase()) ||
-        (f.name || '').toLowerCase().includes((oc.fornecedor || '').toLowerCase())
-      );
-      email = fornParcial ? (fornParcial.email || '') : '';
-    } else {
-      email = forn ? (forn.email || '') : '';
-    }
+    const fnome = (oc.fornecedor || '').toLowerCase();
+    const forn = (window._fornecedores || []).find(f => (f.name||'').toLowerCase() === fnome)
+              || (window._fornecedores || []).find(f =>
+                    fnome.includes((f.name||'').toLowerCase()) ||
+                    (f.name||'').toLowerCase().includes(fnome));
+    email = forn ? (forn.email || '') : '';
   }
 
   if (!email) {
-    alert(`⚠️ O fornecedor "${oc.fornecedor}" não tem e-mail cadastrado.\n\nCadastre o e-mail do fornecedor na aba "Fornecedores → Cadastrar" e tente novamente.\n\nVocê ainda pode baixar o PDF e enviar manualmente.`);
+    alert(`⚠️ O fornecedor "${oc.fornecedor}" não tem e-mail cadastrado.\n\nCadastre o e-mail na aba Fornecedores e tente novamente.\n\nVocê ainda pode baixar o PDF e enviar manualmente.`);
     return;
   }
 
-  // Monta lista de itens em texto (limitado para não estourar URL do GAS)
-  const itensTexto = oc.itens.map((it, i) =>
+  // Itens em texto (truncado para não estourar URL do GAS)
+  const itensArr = Array.isArray(oc.itens) ? oc.itens
+                 : (typeof oc.itens==='string' ? JSON.parse(oc.itens||'[]') : []);
+  const itensTexto = itensArr.map((it, i) =>
     `${i+1}. ${it.descricao} — Qtd: ${it.quantidade} ${it.unidade}${it.valor_unit > 0 ? ` — R$ ${fmtBRL(it.valor_unit)}/un = ${fmtBRL(it.valor_total)}` : ''}`
   ).join('\n');
-  // CORREÇÃO: trunca itensTexto para evitar estouro de URL no GAS (limite ~6KB para este campo)
-  const itensTextoTrunc = itensTexto.length > 2000 ? itensTexto.substring(0, 2000) + '\n...(lista truncada — ver PDF em anexo)' : itensTexto;
+  const itensTextoTrunc = itensTexto.length > 2000
+    ? itensTexto.substring(0, 2000) + '\n...(ver PDF em anexo para lista completa)'
+    : itensTexto;
 
   showLoading('Gerando PDF da OC...');
   try {
-    // 1. Gera PDF
-    const pdfBlob = await _gerarPDFBlob(oc);
+    // ── PASSO 1: Gera PDF ──────────────────────────────────────────────────────
+    let pdfBlob;
+    try {
+      pdfBlob = await _gerarPDFBlob(oc);
+    } catch(pdfErr) {
+      console.error('_gerarPDFBlob falhou:', pdfErr);
+      hideLoading();
+      if (confirm('⚠️ Não foi possível gerar o PDF.\n\nDeseja enviar o e-mail sem anexo PDF?')) {
+        await _enviarOCEmailSemPDF(oc, email, itensTextoTrunc);
+      }
+      return;
+    }
+
     const base64Full = await _blobParaBase64(pdfBlob);
     const _nomeForn = (oc.fornecedor||'Fornecedor').replace(/[^a-zA-ZÀ-ÿ0-9\s]/g,'').trim().substring(0,40);
-    const _data = oc.data ? new Date(oc.data+'T12:00:00') : new Date();
-    const _ddmm = String(_data.getDate()).padStart(2,'0')+String(_data.getMonth()+1).padStart(2,'0')+_data.getFullYear();
-    const nomePDF = `OC ${_nomeForn} ${_ddmm}.pdf`;
-    const pdfKey = 'pdf_' + oc.id + '_' + Date.now();
+    const _d = oc.data ? new Date(oc.data+'T12:00:00') : new Date();
+    const _ddmm = String(_d.getDate()).padStart(2,'0')+String(_d.getMonth()+1).padStart(2,'0')+_d.getFullYear();
+    const nomePDF = `OC_${_nomeForn}_${_ddmm}.pdf`;
+    const pdfKey  = 'pdf_' + oc.id + '_' + Date.now();
 
-    // 2. Envia PDF em chunks sequenciais de 5000 chars
-    // Limite URL GAS ≈ 8KB. JSON do chunk ≈ 5100 chars → base64 ≈ 6800 chars → URL ≈ 7KB ✓
-    // Envio sequencial evita race conditions de escrita simultânea no GAS
-    const CHUNK = 5000;
+    // ── PASSO 2: Envia PDF em chunks ao GAS ───────────────────────────────────
+    const CHUNK_SIZE = 4000; // reduzido de 5000 para margem extra de segurança
     const chunks = [];
-    for(let i = 0; i < base64Full.length; i += CHUNK) {
-      chunks.push(base64Full.substring(i, i + CHUNK));
+    for (let i = 0; i < base64Full.length; i += CHUNK_SIZE) {
+      chunks.push(base64Full.substring(i, i + CHUNK_SIZE));
     }
     const total = chunks.length;
-    showLoading(`Enviando PDF ao servidor (0/${total})...`);
-    for(let i = 0; i < total; i++) {
+
+    for (let i = 0; i < total; i++) {
       showLoading(`Enviando PDF ao servidor (${i+1}/${total})...`);
-      const chunkPayload = { key: pdfKey, chunk: i, total, data: chunks[i] };
-      const b64c = encodeURIComponent(_toB64(JSON.stringify(chunkPayload)));
-      const res = await _gasFetch(`${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`);
+      const payload = { key: pdfKey, chunk: i, total, data: chunks[i] };
+      const b64c = encodeURIComponent(_toB64(JSON.stringify(payload)));
+      const url  = `${GS_API}?action=storePDFChunk&data=${b64c}&enc=b64`;
+      const res  = await _gasFetch(url);
       if (!res || res.error) {
-        throw new Error(`Chunk ${i+1}/${total} falhou: ${res ? res.error : 'sem resposta do servidor'}`);
+        // Chunk falhou — tenta enviar sem PDF
+        hideLoading();
+        console.error(`storePDFChunk chunk ${i+1}/${total} falhou:`, res);
+        if (confirm(`⚠️ Falha ao enviar chunk ${i+1}/${total} do PDF ao servidor.\n\nDeseja enviar o e-mail sem anexo PDF?`)) {
+          await _enviarOCEmailSemPDF(oc, email, itensTextoTrunc);
+        }
+        return;
       }
     }
 
-    // 3. Dispara o envio do e-mail com o PDF já armazenado no GAS
+    // ── PASSO 3: Dispara e-mail via GAS ───────────────────────────────────────
     showLoading('Enviando e-mail ao fornecedor...');
     const gasPayload = {
       to_email:     email,
@@ -7689,35 +7725,63 @@ window.enviarOCFornecedor = async function(ocId) {
     hideLoading();
 
     if (resp && resp.success) {
-      // CORREÇÃO: atualiza o objeto oc local E o da lista (podem ser referências diferentes)
-      oc.status = 'enviada';
-      oc.enviada_em = new Date().toISOString();
-      oc.emailStatus = 'enviado';
-      const ocSalva = window._ocList.find(x => x.id === oc.id);
-      if (ocSalva) {
-        ocSalva.status = 'enviada';
-        ocSalva.enviada_em = oc.enviada_em;
-        ocSalva.emailStatus = 'enviado';
-        await _saveOCDirect(ocSalva).catch(()=>{});
-      } else {
-        // OC pode ter sido criada agora — salva direto o objeto local
-        await _saveOCDirect(oc).catch(()=>{});
-      }
+      // Atualiza OC local e no GAS
+      const ocRef = window._ocList.find(x => x.id === oc.id) || oc;
+      ocRef.status      = 'enviada';
+      ocRef.enviada_em  = new Date().toISOString();
+      ocRef.emailStatus = 'enviado';
+      await _saveOCDirect(ocRef).catch(()=>{});
       fecharModalOC();
       renderOCPage();
       toast(`📧 OC ${oc.numero} enviada com PDF para ${email}!`, 'success');
     } else {
-      const motivo = (resp && resp.error) ? resp.error : 'Sem resposta do servidor';
-      toast(`⚠️ Falha ao enviar e-mail: ${motivo}`, 'error');
-      _enviarOCViaMailto(oc, email, itensTextoTrunc);
+      const motivo = (resp && resp.error) ? resp.error : 'Sem resposta do servidor GAS';
+      console.error('sendOCEmail GAS error:', motivo, '| resp:', resp);
+      // Fallback: mailto sem PDF
+      const useMailto = confirm(
+        `⚠️ Falha no envio via servidor:\n${motivo}\n\nDeseja abrir o e-mail no seu cliente de e-mail (sem PDF)?`
+      );
+      if (useMailto) _enviarOCViaMailto(oc, email, itensTexto);
     }
   } catch(err) {
     hideLoading();
-    console.error('Erro ao gerar/enviar PDF:', err);
-    if (window.toast) window.toast('⚠️ Erro ao gerar PDF. Usando fallback de e-mail.', 'error');
-    _enviarOCViaMailto(oc, email, itensTextoTrunc);
+    console.error('Erro em enviarOCFornecedor:', err);
+    const useMailto = confirm(`⚠️ Erro inesperado: ${err.message}\n\nDeseja abrir o e-mail no seu cliente de e-mail?`);
+    if (useMailto) _enviarOCViaMailto(oc, email, itensTexto);
   }
 };
+
+// E-mail sem PDF (fallback quando chunks falham)
+async function _enviarOCEmailSemPDF(oc, email, itensTexto) {
+  showLoading('Enviando e-mail sem anexo...');
+  const gasPayload = {
+    to_email:     email,
+    to_name:      oc.fornecedor,
+    oc_id:        String(oc.id),
+    oc_numero:    oc.numero,
+    oc_data:      formatarData(oc.data),
+    cond_pgto:    oc.cond_pgto || 'A combinar',
+    prev_entrega: oc.prev_entrega ? formatarData(oc.prev_entrega) : 'A combinar',
+    itens_lista:  itensTexto,
+    total_geral:  fmtBRL(oc.total || 0),
+    obs:          oc.obs || '',
+    from_name:    window.currentUser ? window.currentUser.name : 'A.H. Vila Nova'
+    // sem pdf_key → GAS envia sem anexo
+  };
+  const b64p = encodeURIComponent(_toB64(JSON.stringify(gasPayload)));
+  const resp = await _gasFetch(`${GS_API}?action=sendOCEmail&data=${b64p}&enc=b64`);
+  hideLoading();
+  if (resp && resp.success) {
+    const ocRef = window._ocList.find(x => x.id === oc.id) || oc;
+    ocRef.status = 'enviada'; ocRef.enviada_em = new Date().toISOString(); ocRef.emailStatus = 'enviado';
+    await _saveOCDirect(ocRef).catch(()=>{});
+    fecharModalOC(); renderOCPage();
+    toast(`📧 OC ${oc.numero} enviada (sem PDF) para ${email}.`, 'warning');
+  } else {
+    toast('⚠️ Falha também no envio sem PDF. Abrindo cliente de e-mail...', 'error');
+    _enviarOCViaMailto(oc, email, itensTexto);
+  }
+}
 
 function _enviarOCViaMailto(oc, email, itensTexto) {
   const assunto = encodeURIComponent(`Ordem de Compra ${oc.numero} — A.H. Vila Nova`);
@@ -7731,14 +7795,12 @@ function _enviarOCViaMailto(oc, email, itensTexto) {
     (oc.obs ? `Observações: ${oc.obs}\n\n` : '') +
     `Atenciosamente,\n${window.currentUser ? window.currentUser.name : 'A.H. Vila Nova'}`
   );
-  window.location.href = `mailto:${email}?subject=${assunto}&body=${corpo}`;
-  // Marca como enviada
-  const ocSalva = window._ocList.find(x => x.id === oc.id);
-  if (ocSalva) { ocSalva.status = 'enviada'; }
-  window._ocList.forEach(oc => _saveOCDirect(oc).catch(()=>{}));
-  fecharModalOC();
+  window.open(`mailto:${email}?subject=${assunto}&body=${corpo}`, '_blank');
+  // Marca apenas esta OC como enviada
+  const ocRef = window._ocList.find(x => x.id === oc.id) || oc;
+  ocRef.status = 'enviada';
+  _saveOCDirect(ocRef).catch(()=>{});
   renderOCPage();
-  if (window.toast) window.toast(`📧 E-mail de OC aberto para ${email}. Faça o download do PDF para anexar.`, 'success');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7886,11 +7948,11 @@ window.cancelarOC = function(id) {
 
 window.excluirOC = async function(id) {
   if (!confirm('Excluir esta OC permanentemente? Esta ação não pode ser desfeita.')) return;
-  // CORREÇÃO: deleta do GAS antes de remover da lista local
-  // Sem isso, a OC reaparecia ao recarregar (GAS ainda a tinha)
+  // Deleta do GAS primeiro (sem isso reaparece no próximo carregamento)
   try {
     await gsDelete('oc_list', id);
     if (window._knownGASOCIds) window._knownGASOCIds.delete(String(id));
+    _pendingSaves.ocs.delete(String(id));
   } catch(e) { console.warn('excluirOC: erro ao deletar do GAS:', e); }
   window._ocList = (window._ocList || []).filter(x => x.id !== id);
   renderOCPage();
@@ -7917,6 +7979,27 @@ function iniciarSincronizacao() {
 
   // Sincroniza após delay suficiente para saves iniciais concluírem
   setTimeout(sincronizarDados, 8000);
+
+  // SEGURANÇA: drena saves pendentes ao fechar/recarregar a aba
+  window.addEventListener('beforeunload', (e) => {
+    const pendOCs = window._pendingSaves && window._pendingSaves.ocs
+      ? Array.from(window._pendingSaves.ocs.values())
+      : [];
+    if (pendOCs.length > 0) {
+      // Tenta salvar via sendBeacon (fire-and-forget, funciona mesmo ao fechar)
+      pendOCs.forEach(oc => {
+        try {
+          const ser = { ...oc, itens: typeof oc.itens==='string' ? oc.itens : JSON.stringify(oc.itens||[]) };
+          const payload = _toB64(JSON.stringify(ser));
+          const url = `${GS_API}?action=insert&sheet=oc_list&data=${encodeURIComponent(payload)}&enc=b64`;
+          navigator.sendBeacon(url);
+        } catch(err) {}
+      });
+      // Avisa o usuário que há saves pendentes
+      e.preventDefault();
+      e.returnValue = `Atenção: ${pendOCs.length} OC(s) ainda sendo salvas. Aguarde alguns segundos antes de fechar.`;
+    }
+  });
 }
 
 async function sincronizarDados() {
@@ -7941,8 +8024,17 @@ async function sincronizarDados() {
         const remoteIds = new Set(parsedOCs.map(o => String(o.id)));
         const localOnly = (window._ocList || []).filter(o => !remoteIds.has(String(o.id)));
         window._ocList = parsedOCs.concat(localOnly);
-        window._knownGASOCIds = new Set(parsedOCs.map(o => String(o.id)));
+        // CORREÇÃO: inclui localOnly no _knownGASOCIds para evitar INSERT duplicado
+        // nas OCs que estão localmente mas ainda não chegaram ao GAS
+        window._knownGASOCIds = new Set([
+          ...parsedOCs.map(o => String(o.id)),
+          ...localOnly.map(o => String(o.id))
+        ]);
         dedupOCList();
+        // Salva no GAS qualquer OC local que não está no GAS ainda
+        for (const oc of localOnly) {
+          _saveOCDirect(oc).catch(()=>{});
+        }
       }
     }
     const pageOC = document.getElementById('page-oc');
@@ -7953,6 +8045,81 @@ async function sincronizarDados() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Diagnóstico GAS para OCs (botão 🔧 na aba OC) ────────────────────────────
+window._diagnosticoOC = async function() {
+  const lines = [];
+  lines.push('🔧 DIAGNÓSTICO GAS — OCs\n');
+
+  // 1. Teste de conexão
+  lines.push('1. Testando conexão com GAS...');
+  try {
+    const r = await fetch(`${GS_API}?action=test`, { redirect:'follow' });
+    const d = await r.json();
+    lines.push('   ✅ GAS respondeu: ' + d.message);
+  } catch(e) {
+    lines.push('   ❌ GAS NÃO respondeu: ' + e.message);
+    alert(lines.join('\n'));
+    return;
+  }
+
+  // 2. Leitura da oc_list
+  lines.push('2. Lendo oc_list no GAS...');
+  try {
+    const rows = await gsGetAll('oc_list', true);
+    lines.push(`   ✅ ${rows.length} linha(s) na oc_list`);
+    if (rows.length > 0) {
+      rows.slice(0,3).forEach((r,i) => lines.push(`   Linha ${i+1}: id=${r.id}, json_preview=${(r.json||'').substring(0,60)}...`));
+    }
+  } catch(e) {
+    lines.push('   ❌ Erro ao ler oc_list: ' + e.message);
+  }
+
+  // 3. OCs em memória
+  lines.push(`3. OCs em memória: ${(window._ocList||[]).length}`);
+  lines.push(`   _knownGASOCIds: ${window._knownGASOCIds ? window._knownGASOCIds.size : 0} IDs`);
+  lines.push(`   _pendingSaves.ocs: ${window._pendingSaves ? window._pendingSaves.ocs.size : 0} pendentes`);
+
+  // 4. Teste de insert
+  lines.push('4. Testando INSERT no GAS...');
+  try {
+    const testOC = { id: 'diag_test_' + Date.now(), numero: 'TESTE', status: 'teste' };
+    const r = await gsInsert('oc_list', testOC);
+    if (r && r.status === 'ok') {
+      lines.push('   ✅ INSERT OK — id: ' + r.id);
+      // Limpa o registro de teste
+      await gsDelete('oc_list', testOC.id);
+      lines.push('   ✅ DELETE OK (limpeza do teste)');
+    } else {
+      lines.push('   ❌ INSERT retornou: ' + JSON.stringify(r));
+    }
+  } catch(e) {
+    lines.push('   ❌ Erro no INSERT: ' + e.message);
+  }
+
+  // 5. Teste de sendOCEmail (verifica se GAS tem permissão de email)
+  lines.push('5. Status do e-mail GAS:');
+  lines.push('   ℹ️ Para verificar: acesse o GAS Editor → Executar → diagnostico()');
+  lines.push('   Se o GAS nunca enviou e-mail antes, precisa de autorização manual.');
+
+  alert(lines.join('\n'));
+};
+
+// Atualiza indicador de status de save na aba OC
+function _atualizarOCSaveStatus() {
+  const el = document.getElementById('oc-save-status');
+  if (!el) return;
+  const pend = window._pendingSaves ? window._pendingSaves.ocs.size : 0;
+  if (pend > 0) {
+    el.style.display = 'block';
+    el.style.background = 'rgba(251,191,36,0.15)';
+    el.style.color = 'var(--yellow)';
+    el.style.border = '1px solid rgba(251,191,36,0.3)';
+    el.textContent = `⏳ ${pend} OC(s) aguardando salvar no servidor...`;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 // 11. CARREGAMENTO INICIAL DAS OCs SALVAS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -8019,39 +8186,32 @@ async function _carregarStatusEmailOC() {
   try {
     const rows = await gsGetAll('oc_emails_log', true);
     if (!Array.isArray(rows) || !rows.length) return;
-    // Mapa: oc_id → { status, data }
+
+    // gsGetAll já retorna SEM cabeçalho — NÃO usar slice(1)
+    // A aba oc_emails_log usa getOrCreateSheet cujas colunas são:
+    //   col "id"        → oc_id  (chave de busca)
+    //   col "json"      → oc_numero
+    //   col "chunk"     → to_email
+    //   col "total"     → timestamp_envio
+    //   col "timestamp" → status  ('enviado' | 'visualizado' | 'confirmado')
     const statusMap = {};
-    // CORREÇÃO: NÃO usar slice(1) — gsGetAll já retorna sem cabeçalho.
-    // CORREÇÃO: oc_emails_log usa getOrCreateSheet cujas colunas são:
-    //   id=oc_id, json=oc_numero, chunk=to_email, total=timestamp_envio, timestamp=status_email
-    // Usar os campos pelo nome em vez de Object.values (ordem pode variar)
     rows.forEach(r => {
-      // Suporte a ambos os formatos: objeto com campos nomeados ou array
-      let ocId, status, dataLeitura;
-      if (Array.isArray(r)) {
-        ocId       = String(r[0] || '');
-        status     = String(r[4] || '');
-        dataLeitura= String(r[5] || '');
-      } else {
-        // Campos mapeados conforme estrutura do getOrCreateSheet:
-        // col id → oc_id, col json → oc_numero, col chunk → email,
-        // col total → timestamp_envio, col timestamp → status
-        ocId       = String(r.id        || '');
-        status     = String(r.timestamp || '');  // 5ª coluna = status no oc_emails_log
-        dataLeitura= '';  // 6ª coluna não tem cabeçalho nomeado — não usada aqui
-      }
-      if (ocId && (!statusMap[ocId] || status === 'confirmado')) {
-        statusMap[ocId] = { status, data: dataLeitura };
+      const ocId  = String(r.id        || '');
+      const status= String(r.timestamp || '');   // 5ª col = status no oc_emails_log
+      if (!ocId) return;
+      // Prioriza 'confirmado' > 'visualizado' > 'enviado'
+      const prio = { confirmado: 3, visualizado: 2, enviado: 1 };
+      if (!statusMap[ocId] || (prio[status]||0) > (prio[statusMap[ocId].status]||0)) {
+        statusMap[ocId] = { status };
       }
     });
+
     // Injeta em cada OC
     window._ocList.forEach(oc => {
       const st = statusMap[String(oc.id)] || statusMap[String(oc.numero)];
-      if (st) {
-        oc.emailStatus = st.status;   // 'enviado' | 'visualizado' | 'confirmado'
-        oc.emailStatusAt = st.data;
-      }
+      if (st) oc.emailStatus = st.status;
     });
+
     // Re-renderiza painel de OCs se estiver visível
     const pageOC = document.getElementById('page-oc');
     if (pageOC && pageOC.classList.contains('active')) renderOCPage();
