@@ -3992,7 +3992,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbxmCiUy6E3h1hwAAKHX04maiUs97LYm_ID5E4VS7G-8Mqg_wR0c-htWqRiaFWR0ppJM/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbxg2TTn-Eb1TQSymwn07gxax40pawqIoprvAKkflUbUQK3jDDi3UzMxRedBI20udvw1/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -8086,20 +8086,37 @@ window._diagnosticoOC = async function() {
     const r = await gsInsert('oc_list', testOC);
     if (r && r.status === 'ok') {
       lines.push('   ✅ INSERT OK — id: ' + r.id);
-      // Limpa o registro de teste
       await gsDelete('oc_list', testOC.id);
       lines.push('   ✅ DELETE OK (limpeza do teste)');
+      lines.push('\n✅ GAS FUNCIONANDO! Saves de OC devem persistir agora.');
     } else {
-      lines.push('   ❌ INSERT retornou: ' + JSON.stringify(r));
+      const errMsg = r ? (r.error || JSON.stringify(r)) : 'sem resposta';
+      lines.push('   ❌ INSERT retornou: ' + errMsg);
+
+      // Diagnóstico específico para o erro de colunas
+      if (errMsg.includes('número de colunas') || errMsg.includes('intervalo')) {
+        lines.push('\n⚠️  CAUSA IDENTIFICADA:');
+        lines.push('   A aba "oc_list" no Google Sheets existe mas está');
+        lines.push('   VAZIA (sem cabeçalho). Isso impede qualquer gravação.');
+        lines.push('\n🔧 SOLUÇÃO — faça UMA das opções:');
+        lines.push('   OPÇÃO A (recomendada): Atualize o código GAS para');
+        lines.push('   a versão v3 (arquivo gas_corrigido.gs) e faça');
+        lines.push('   um novo Deploy como "Web App".');
+        lines.push('   OPÇÃO B (manual): No Google Sheets, abra a aba');
+        lines.push('   "oc_list" e adicione na linha 1 as colunas:');
+        lines.push('   id | json | chunk | total | timestamp');
+      } else if (errMsg.includes('parsear') || errMsg.includes('JSON')) {
+        lines.push('\n⚠️  Erro de serialização. Verifique o código GAS.');
+      }
     }
   } catch(e) {
     lines.push('   ❌ Erro no INSERT: ' + e.message);
   }
 
-  // 5. Teste de sendOCEmail (verifica se GAS tem permissão de email)
-  lines.push('5. Status do e-mail GAS:');
-  lines.push('   ℹ️ Para verificar: acesse o GAS Editor → Executar → diagnostico()');
-  lines.push('   Se o GAS nunca enviou e-mail antes, precisa de autorização manual.');
+  // 5. Teste de e-mail
+  lines.push('\n5. Status do e-mail GAS:');
+  lines.push('   ℹ️ No GAS Editor → execute a função diagnostico()');
+  lines.push('   Autorize o Gmail quando solicitado (necessário 1x).');
 
   alert(lines.join('\n'));
 };
