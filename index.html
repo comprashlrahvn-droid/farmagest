@@ -830,6 +830,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
           <select class="filter-select" id="filter-mov-tipo" onchange="renderMovimentos()">
             <option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
           </select>
+          <button id="btn-zerar-movimentos" class="btn btn-danger" style="display:none" onclick="zerarMovimentosEstoque()" title="Apaga TODOS os movimentos e zera o estoque (somente admin)">🗑️ Zerar Estoque</button>
         </div>
         <div class="table-wrap">
           <div class="table-header"><span class="table-header-title" id="mov-count">—</span></div>
@@ -3992,7 +3993,7 @@ function _executarRegistroNFManual(numero, fornecedor, data, ocId, ocIds){
 }
 
 // ── GOOGLE SHEETS API (Qualificação/Entregas) ─────────────────────────────────
-const GS_API = 'https://script.google.com/macros/s/AKfycbxg2TTn-Eb1TQSymwn07gxax40pawqIoprvAKkflUbUQK3jDDi3UzMxRedBI20udvw1/exec';
+const GS_API = 'https://script.google.com/macros/s/AKfycbwGFIwSyTkq37A3B0EyjexhgAAJx921yonPP8BtcKqNQbWis2yNdIjncutIRV2MANo/exec';
 const gsCache = {};
 
 // ── TESTE DE CONEXÃO COM O BANCO DE DADOS ─────────────────────────────────────
@@ -4627,20 +4628,28 @@ async function loadMainState() {
       });
       try { localStorage.setItem('fg_movimentos_backup', JSON.stringify(movimentos)); } catch(e){}
     } else {
-      // GAS vazio — restaura do localStorage
-      try {
-        const bkp = JSON.parse(localStorage.getItem('fg_movimentos_backup')||'null');
-        if(Array.isArray(bkp) && bkp.length > 0) {
-          movimentos = bkp.map(m => {
-            if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
-            if(m.prod_id !== undefined) m.prod_id = isNaN(m.prod_id) ? m.prod_id : Number(m.prod_id);
-            return m;
-          });
-          console.warn('[MOV] GAS vazio — restaurado localStorage ('+movimentos.length+' movimentos)');
-          // Reenvia ao GAS em background
-          movimentos.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
-        }
-      } catch(e){}
+      // GAS vazio — verifica se foi zerado INTENCIONALMENTE pelo admin
+      // (flag gravada por zerarMovimentosEstoque(); impede re-população automática)
+      const _clearedAt = localStorage.getItem('fg_movimentos_cleared_at');
+      if (_clearedAt) {
+        movimentos = [];
+        console.log('[MOV] GAS vazio intencionalmente (zerado em ' + _clearedAt + '). localStorage NÃO restaurado.');
+      } else {
+        // GAS vazio por falha de conexão — restaura do localStorage como fallback
+        try {
+          const bkp = JSON.parse(localStorage.getItem('fg_movimentos_backup')||'null');
+          if(Array.isArray(bkp) && bkp.length > 0) {
+            movimentos = bkp.map(m => {
+              if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
+              if(m.prod_id !== undefined) m.prod_id = isNaN(m.prod_id) ? m.prod_id : Number(m.prod_id);
+              return m;
+            });
+            console.warn('[MOV] GAS vazio — restaurado localStorage ('+movimentos.length+' movimentos)');
+            // Reenvia ao GAS em background
+            movimentos.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
+          }
+        } catch(e){}
+      }
     }
 
     if(Array.isArray(loadedEntregas) && loadedEntregas.length > 0) {
@@ -4933,6 +4942,9 @@ function showApp() {
     const adminBtn=document.getElementById('nav-btn-usuarios');
     if(adminSec) adminSec.style.display='block';
     if(adminBtn) adminBtn.style.display='flex';
+    // Botão de zerar estoque: somente admin master
+    const btnZerar = document.getElementById('btn-zerar-movimentos');
+    if(btnZerar) btnZerar.style.display='inline-flex';
   }
 }
 
@@ -5090,6 +5102,55 @@ async function confirmarImportacaoPlanilha() {
   }
 
   _planilhaImportData = [];
+}
+
+// ── ZERAR MOVIMENTOS DE ESTOQUE (admin master) ────────────────────────────────
+// Apaga todos os movimentos do GAS + limpa localStorage.
+// Grava flag 'fg_movimentos_cleared_at' para evitar que o fallback de
+// conexão restaure automaticamente os dados do backup local.
+async function zerarMovimentosEstoque() {
+  if(!currentUser || currentUser.role !== 'admin') {
+    showToast('Apenas administradores podem zerar o estoque.', 'error'); return;
+  }
+  const ok1 = confirm(
+    '⚠️ ATENÇÃO — ZERAR ESTOQUE\n\n' +
+    'Esta ação irá apagar TODOS os movimentos (entradas e saídas).\n' +
+    'O saldo de todos os produtos será zerado.\n\n' +
+    'Esta ação NÃO pode ser desfeita.\n\nDeseja continuar?'
+  );
+  if(!ok1) return;
+  const ok2 = confirm('Confirme novamente: apagar TODOS os movimentos de estoque?');
+  if(!ok2) return;
+
+  showToast('Zerando movimentos...', 'info');
+  try {
+    // 1. Apaga aba movimentos no GAS
+    const url = GS_API + '?action=clearSheet&sheet=movimentos';
+    const resp = await fetch(url);
+    const result = await resp.json();
+    if(result.error) throw new Error(result.error);
+
+    // 2. Limpa backup local E grava flag de limpeza intencional
+    localStorage.removeItem('fg_movimentos_backup');
+    localStorage.setItem('fg_movimentos_cleared_at', new Date().toISOString());
+
+    // 3. Zera em memória
+    movimentos = [];
+
+    // 4. Atualiza UI
+    renderMovimentos();
+    renderEstoque();
+    if(typeof updateDashboard === 'function') updateDashboard();
+    if(typeof renderDashboard === 'function') renderDashboard();
+    updateBadges();
+
+    const removidos = result.removed ?? '?';
+    showToast('✅ Estoque zerado! ' + removidos + ' movimentos removidos.', 'success');
+    console.log('[ZERAR] GAS clearSheet OK. Removidos: ' + removidos);
+  } catch(e) {
+    showToast('Erro ao zerar: ' + e.message, 'error');
+    console.error('[ZERAR] Erro:', e);
+  }
 }
 
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
