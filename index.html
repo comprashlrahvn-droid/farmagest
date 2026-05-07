@@ -5155,6 +5155,11 @@ async function zerarMovimentosEstoque() {
 
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
+  // PROTEÇÃO: se o admin zerou intencionalmente o estoque, não re-importar a carga inicial
+  if(localStorage.getItem('fg_movimentos_cleared_at')) {
+    console.log('[CARGA] Suprimida — estoque zerado intencionalmente em ' + localStorage.getItem('fg_movimentos_cleared_at'));
+    return;
+  }
   // CRÍTICO: usa movimentos do GAS como fonte autoritativa — não localStorage
   // Se já existem movimentos de carga inicial no GAS (qualquer computador já importou),
   // não importa de novo
