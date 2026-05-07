@@ -831,6 +831,7 @@ textarea.form-input{min-height:80px;resize:vertical;}
             <option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
           </select>
           <button id="btn-zerar-movimentos" class="btn btn-danger" style="display:none" onclick="zerarMovimentosEstoque()" title="Apaga TODOS os movimentos e zera o estoque (somente admin)">🗑️ Zerar Estoque</button>
+          <button id="btn-reimportar-carga" class="btn btn-warning" style="display:none" onclick="reimportarCargaInicial()" title="Reimporta a carga inicial da planilha (somente admin)">📥 Reimportar Carga</button>
         </div>
         <div class="table-wrap">
           <div class="table-header"><span class="table-header-title" id="mov-count">—</span></div>
@@ -4945,6 +4946,8 @@ function showApp() {
     // Botão de zerar estoque: somente admin master
     const btnZerar = document.getElementById('btn-zerar-movimentos');
     if(btnZerar) btnZerar.style.display='inline-flex';
+    const btnReimp = document.getElementById('btn-reimportar-carga');
+    if(btnReimp) btnReimp.style.display='inline-flex';
   }
 }
 
@@ -5165,6 +5168,31 @@ async function zerarMovimentosEstoque() {
   }
 }
 
+// ── REIMPORTAR CARGA INICIAL (admin master — uso manual) ─────────────────────
+// Executa carregarEstoquePlanilha() manualmente após confirmar com o usuário.
+// Só funciona se não houver nenhum movimento no banco (incluindo sentinela).
+async function reimportarCargaInicial() {
+  if(!currentUser || currentUser.role !== 'admin') {
+    showToast('Apenas administradores podem reimportar a carga inicial.', 'error'); return;
+  }
+  if(movimentos.filter(m=>m.tipo!=='reset').length > 0) {
+    showToast('Já existem movimentos no estoque. Zere o estoque primeiro.', 'error'); return;
+  }
+  const ok = confirm('Reimportar a carga inicial da planilha?\n\nIsso irá criar entradas com os saldos iniciais para todos os produtos cadastrados.');
+  if(!ok) return;
+  // Remove sentinela do banco antes de reimportar
+  try {
+    await fetch(GS_API + '?action=delete&sheet=movimentos&id=SENTINEL_ESTOQUE_ZERADO');
+  } catch(e) {}
+  // Remove flag do localStorage
+  localStorage.removeItem('fg_movimentos_cleared_at');
+  // Limpa movimentos em memória (inclusive sentinela) e reimporta
+  movimentos = [];
+  carregarEstoquePlanilha();
+  renderMovimentos(); renderEstoque(); updateBadges();
+  showToast('✅ Carga inicial reimportada com sucesso!', 'success');
+}
+
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
   // PROTEÇÃO 1: flag no localStorage (mesmo browser)
@@ -5258,8 +5286,11 @@ function dedupMovimentos() {
   } catch(e) { /* usa dados em memória como fallback */ }
   // Remove duplicatas de NF que possam ter sido geradas por bug anterior
   dedupMovimentos();
-  // Carrega saldos corretos da planilha (executa apenas uma vez)
-  carregarEstoquePlanilha();
+  // CARGA INICIAL DESATIVADA DO AUTO-INIT:
+  // A função carregarEstoquePlanilha() foi removida do init automático para evitar
+  // que re-importe dados toda vez que o banco estiver vazio (ex: após zeragem).
+  // Para reimportar manualmente use o botão "Reimportar Carga Inicial" nas configurações.
+  // carregarEstoquePlanilha();
 
   try {
     // Garante que o admin master existe no banco
