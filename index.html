@@ -4501,7 +4501,8 @@ function _loadFromLocalStorage() {
     const bkpNF = JSON.parse(localStorage.getItem('fg_nfhist_backup') || 'null');
     if(Array.isArray(bkpNF)) nfHistory = bkpNF;
     const bkpMov = JSON.parse(localStorage.getItem('fg_movimentos_backup') || 'null');
-    if(Array.isArray(bkpMov)) movimentos = bkpMov;
+    // NÃO restaura movimentos se o estoque foi zerado intencionalmente
+    if(Array.isArray(bkpMov) && !localStorage.getItem('fg_movimentos_cleared_at')) movimentos = bkpMov;
     const bkpOrd = JSON.parse(localStorage.getItem('fg_orders_backup') || 'null');
     if(Array.isArray(bkpOrd)) { purchaseOrders = bkpOrd; window.purchaseOrders = purchaseOrders; }
   } catch(e) { console.warn('_loadFromLocalStorage error:', e); }
@@ -4646,8 +4647,10 @@ async function loadMainState() {
               return m;
             });
             console.warn('[MOV] GAS vazio — restaurado localStorage ('+movimentos.length+' movimentos)');
-            // Reenvia ao GAS em background
-            movimentos.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
+            // Reenvia ao GAS em background SOMENTE se não foi zerado intencionalmente
+            if(!localStorage.getItem('fg_movimentos_cleared_at')) {
+              movimentos.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
+            }
           }
         } catch(e){}
       }
@@ -5127,7 +5130,11 @@ async function zerarMovimentosEstoque() {
 
   showToast('Zerando movimentos...', 'info');
   try {
-    // 1. Limpa localStorage IMEDIATAMENTE (antes de qualquer chamada GAS)
+    // 1. CANCELA IMEDIATAMENTE todos os saves pendentes (evita re-gravação pelo timer)
+    if(_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+    _pendingSaves.movimentos.clear();
+
+    // 2. Limpa localStorage IMEDIATAMENTE (antes de qualquer chamada GAS)
     localStorage.removeItem('fg_movimentos_backup');
     localStorage.setItem('fg_movimentos_cleared_at', new Date().toISOString());
     movimentos = [];
