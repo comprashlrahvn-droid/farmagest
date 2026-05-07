@@ -2882,8 +2882,7 @@ let movimentos = []; // {id, tipo:'entrada'|'saida', prod_id, qtd, data, resp, o
 let estPage=1, movPage=1;
 
 function getEstoque(prodId){
-  // sum all movements for this product
-  return movimentos.filter(m=>m.prod_id==prodId).reduce((s,m)=>m.tipo==='entrada'?s+m.qtd:s-m.qtd, 0);
+  return movimentos.filter(m=>m.prod_id==prodId && m.tipo!=='reset').reduce((s,m)=>m.tipo==='entrada'?s+m.qtd:s-m.qtd, 0);
 }
 
 function getConsumoMedio(prodId, dias){
@@ -2935,6 +2934,7 @@ function renderMovimentos(){
   const q=(document.getElementById('search-mov')||{}).value?.toLowerCase()||'';
   const ft=(document.getElementById('filter-mov-tipo')||{}).value||'';
   const data=[...movimentos].reverse().filter(m=>{
+    if(m.tipo==='reset') return false; // oculta sentinela de zeragem
     const p=products.find(x=>x.id==m.prod_id);
     const mq=!q||p?.material.toLowerCase().includes(q);
     const mt=!ft||m.tipo===ft;
@@ -5105,9 +5105,9 @@ async function confirmarImportacaoPlanilha() {
 }
 
 // ── ZERAR MOVIMENTOS DE ESTOQUE (admin master) ────────────────────────────────
-// Apaga todos os movimentos do GAS + limpa localStorage.
-// Grava flag 'fg_movimentos_cleared_at' para evitar que o fallback de
-// conexão restaure automaticamente os dados do backup local.
+// Apaga todos os movimentos do GAS e grava um SENTINELA no banco de dados.
+// O sentinela (tipo:'reset') persiste no Sheets e bloqueia a re-importação da
+// carga inicial em QUALQUER navegador/dispositivo — não depende só do localStorage.
 async function zerarMovimentosEstoque() {
   if(!currentUser || currentUser.role !== 'admin') {
     showToast('Apenas administradores podem zerar o estoque.', 'error'); return;
@@ -5124,29 +5124,41 @@ async function zerarMovimentosEstoque() {
 
   showToast('Zerando movimentos...', 'info');
   try {
-    // 1. Apaga aba movimentos no GAS
+    // 1. Limpa localStorage IMEDIATAMENTE (antes de qualquer chamada GAS)
+    localStorage.removeItem('fg_movimentos_backup');
+    localStorage.setItem('fg_movimentos_cleared_at', new Date().toISOString());
+    movimentos = [];
+
+    // 2. Chama GAS para limpar a aba movimentos no Sheets
     const url = GS_API + '?action=clearSheet&sheet=movimentos';
     const resp = await fetch(url);
     const result = await resp.json();
     if(result.error) throw new Error(result.error);
 
-    // 2. Limpa backup local E grava flag de limpeza intencional
-    localStorage.removeItem('fg_movimentos_backup');
-    localStorage.setItem('fg_movimentos_cleared_at', new Date().toISOString());
-
-    // 3. Zera em memória
-    movimentos = [];
+    // 3. Insere SENTINELA no GAS — fica no banco e bloqueia re-importação
+    //    em qualquer browser/dispositivo. Invisível na tela (filtrado no render).
+    const sentinel = {
+      id: 'SENTINEL_ESTOQUE_ZERADO',
+      tipo: 'reset',
+      prod_id: 0,
+      qtd: 0,
+      data: new Date().toISOString().split('T')[0],
+      resp: 'Sistema',
+      obs: '__ESTOQUE_ZERADO__',
+      saldo_apos: 0
+    };
+    await _saveMovimentoDirect(sentinel);
+    movimentos = [sentinel];
 
     // 4. Atualiza UI
     renderMovimentos();
     renderEstoque();
-    if(typeof updateDashboard === 'function') updateDashboard();
     if(typeof renderDashboard === 'function') renderDashboard();
     updateBadges();
 
     const removidos = result.removed ?? '?';
     showToast('✅ Estoque zerado! ' + removidos + ' movimentos removidos.', 'success');
-    console.log('[ZERAR] GAS clearSheet OK. Removidos: ' + removidos);
+    console.log('[ZERAR] OK. Removidos:', removidos, '| Sentinela gravado no GAS.');
   } catch(e) {
     showToast('Erro ao zerar: ' + e.message, 'error');
     console.error('[ZERAR] Erro:', e);
@@ -5155,9 +5167,15 @@ async function zerarMovimentosEstoque() {
 
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
-  // PROTEÇÃO: se o admin zerou intencionalmente o estoque, não re-importar a carga inicial
+  // PROTEÇÃO 1: flag no localStorage (mesmo browser)
   if(localStorage.getItem('fg_movimentos_cleared_at')) {
-    console.log('[CARGA] Suprimida — estoque zerado intencionalmente em ' + localStorage.getItem('fg_movimentos_cleared_at'));
+    console.log('[CARGA] Suprimida — flag localStorage presente.');
+    return;
+  }
+  // PROTEÇÃO 2: sentinela no banco de dados (qualquer browser/dispositivo)
+  const temSentinela = movimentos.some(m => m.tipo === 'reset' || m.obs === '__ESTOQUE_ZERADO__' || m.id === 'SENTINEL_ESTOQUE_ZERADO');
+  if(temSentinela) {
+    console.log('[CARGA] Suprimida — sentinela encontrado no banco de dados.');
     return;
   }
   // CRÍTICO: usa movimentos do GAS como fonte autoritativa — não localStorage
