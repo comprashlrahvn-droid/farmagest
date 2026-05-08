@@ -4377,7 +4377,22 @@ async function _saveProductDirect(prod) {
 // ── Salva UM movimento no GAS ─────────────────────────────────────────────────
 async function _saveMovimentoDirect(mov) {
   if (!mov || !mov.id) return;
-  try {
+  // ── BLOQUEIO GLOBAL DE CARGA INICIAL ──────────────────────────────────────
+  // Impede que qualquer código (carregarEstoquePlanilha, _drainPendingSaves,
+  // retries do gsGetAll, etc.) grave entradas de Carga Inicial quando o admin
+  // zerou o estoque intencionalmente. Único caminho que passa: o sentinela (tipo:'reset').
+  if (mov.tipo !== 'reset' && (
+        String(mov.resp  || '').includes('Carga Inicial') ||
+        String(mov.obs   || '').includes('importado da planilha') ||
+        String(mov.obs   || '').includes('Saldo inicial')
+      )) {
+    if (localStorage.getItem('fg_movimentos_cleared_at')) {
+      console.warn('[BLOQUEADO] Entrada de Carga Inicial suprimida (estoque zerado):', mov.id);
+      console.trace('[BLOQUEADO] chamado por:');
+      return; // ← NÃO salva no GAS
+    }
+  }
+  // ── FIM DO BLOQUEIO ───────────────────────────────────────────────────────
     await gsInsert('movimentos', mov);
     _pendingSaves.movimentos.delete(String(mov.id));
   } catch(e) {
@@ -5202,6 +5217,7 @@ async function reimportarCargaInicial() {
 
 // Limpa movimentos duplicados e carrega saldos corretos da planilha
 function carregarEstoquePlanilha() {
+  console.trace('[DIAGNÓSTICO] carregarEstoquePlanilha() chamada por:');
   // PROTEÇÃO 1: flag no localStorage (mesmo browser)
   if(localStorage.getItem('fg_movimentos_cleared_at')) {
     console.log('[CARGA] Suprimida — flag localStorage presente.');
