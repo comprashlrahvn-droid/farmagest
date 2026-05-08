@@ -4516,9 +4516,8 @@ function _loadFromLocalStorage() {
     else products = JSON.parse(JSON.stringify(PRODUCTS_RAW));
     const bkpNF = JSON.parse(localStorage.getItem('fg_nfhist_backup') || 'null');
     if(Array.isArray(bkpNF)) nfHistory = bkpNF;
-    const bkpMov = JSON.parse(localStorage.getItem('fg_movimentos_backup') || 'null');
-    // NÃO restaura movimentos se o estoque foi zerado intencionalmente
-    if(Array.isArray(bkpMov) && !localStorage.getItem('fg_movimentos_cleared_at')) movimentos = bkpMov;
+    // Movimentos NÃO são restaurados do localStorage — GAS é fonte autoritativa.
+    // Se GAS está vazio/indisponível, estoque fica vazio até GAS responder.
     const bkpOrd = JSON.parse(localStorage.getItem('fg_orders_backup') || 'null');
     if(Array.isArray(bkpOrd)) { purchaseOrders = bkpOrd; window.purchaseOrders = purchaseOrders; }
   } catch(e) { console.warn('_loadFromLocalStorage error:', e); }
@@ -4646,30 +4645,11 @@ async function loadMainState() {
       });
       try { localStorage.setItem('fg_movimentos_backup', JSON.stringify(movimentos)); } catch(e){}
     } else {
-      // GAS vazio — verifica se foi zerado INTENCIONALMENTE pelo admin
-      // (flag gravada por zerarMovimentosEstoque(); impede re-população automática)
-      const _clearedAt = localStorage.getItem('fg_movimentos_cleared_at');
-      if (_clearedAt) {
-        movimentos = [];
-        console.log('[MOV] GAS vazio intencionalmente (zerado em ' + _clearedAt + '). localStorage NÃO restaurado.');
-      } else {
-        // GAS vazio por falha de conexão — restaura do localStorage como fallback
-        try {
-          const bkp = JSON.parse(localStorage.getItem('fg_movimentos_backup')||'null');
-          if(Array.isArray(bkp) && bkp.length > 0) {
-            movimentos = bkp.map(m => {
-              if(m.qtd !== undefined) m.qtd = Number(m.qtd)||0;
-              if(m.prod_id !== undefined) m.prod_id = isNaN(m.prod_id) ? m.prod_id : Number(m.prod_id);
-              return m;
-            });
-            console.warn('[MOV] GAS vazio — restaurado localStorage ('+movimentos.length+' movimentos)');
-            // Reenvia ao GAS em background SOMENTE se não foi zerado intencionalmente
-            if(!localStorage.getItem('fg_movimentos_cleared_at')) {
-              movimentos.forEach(m => _saveMovimentoDirect(m).catch(()=>{}));
-            }
-          }
-        } catch(e){}
-      }
+      // GAS vazio para movimentos.
+      // FONTE AUTORITATIVA É O GAS: se GAS está vazio, estoque está vazio.
+      // NÃO restaurar do localStorage — evita re-população após zeragem manual.
+      movimentos = [];
+      console.log('[MOV] GAS vazio — estoque sem movimentos (localStorage ignorado).');
     }
 
     if(Array.isArray(loadedEntregas) && loadedEntregas.length > 0) {
