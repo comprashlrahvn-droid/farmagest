@@ -3312,6 +3312,10 @@ function gerarPedido(){
   renderPedidos();
   // CRÍTICO: salva ordem imediatamente no GAS (1 requisição)
   _saveOrderDirect(ordem).then(()=>{
+    // Registra o id como conhecido no GAS para que futuras atualizações
+    // de status usem gsUpdate (não gsInsert)
+    if(!window._knownGASOrderIds) window._knownGASOrderIds = new Set();
+    window._knownGASOrderIds.add(String(ordem.id));
     toast('✅ '+ordem.numero+' salva no banco de dados!','success');
   }).catch(()=>{
     toast('⚠️ Pedido salvo localmente. Verifique conexão com o banco.','warning');
@@ -3484,9 +3488,9 @@ function linkNFToSpecificOC(nfItensArr, ocId){
   // 1. Atualiza purchaseOrders (lista antiga) — apenas o order que tenha oc_ref igual ao ocId
   purchaseOrders.forEach(o=>{
     if(o.status==='entregue')return;
-    // Verifica se este order está vinculado à OC selecionada
     const ocRef = o.oc_ref || o.id;
     if(ocRef && String(ocRef) !== String(ocId)) return;
+    let ordemAlterada = false;
     o.itens.forEach(oi=>{
       if(oi.status!=='pendente')return;
       const matched=nfItensArr.find(ni=>ni.matched?.some(m=>m.id===oi.prod_id));
@@ -3494,9 +3498,13 @@ function linkNFToSpecificOC(nfItensArr, ocId){
         const qtdUn=calcQtdUn(matched);
         oi.qty_faturada=(oi.qty_faturada||0)+qtdUn;
         oi.status='faturado';
+        ordemAlterada = true;
       }
     });
     o.status=calcOrderStatus(o);
+    // CRÍTICO: salva imediatamente no GAS para persistir 'faturado' nos itens.
+    // Sem isso, um refresh antes do saveMainState (debounce 2s) reverte para 'pendente'.
+    if(ordemAlterada) _saveOrderDirect(o).catch(e=>console.warn('order save err (linkNF):', e));
   });
 
   // 2. Atualiza a OC no _ocList pelo ID
@@ -3592,14 +3600,14 @@ function registrarLoteValCurta(prodId, material, codBionexo, validade, lote, nfN
 // REGRA: itens SÓ entram no estoque após confirmação de entrega (nunca ao faturar).
 // Retorna array de alertas de validade curta detectados nesta entrega.
 function linkDeliveryToOrders(nfEntry){
-  // GUARD: se já existe qualquer movimento lançado por esta NF, não lança de novo (idempotente)
+  // GUARD: se já existe movimento para esta NF, não relança entradas no estoque (idempotente)
+  // MAS ainda atualiza status da ordem para 'entregue' se necessário
   const nfTag = 'NF '+nfEntry.numero;
   const jaExiste = movimentos.some(m => m.obs && m.obs.includes(nfTag));
-  if(jaExiste) return [];
 
   const jaLancado = new Set();
   const alertasValCurta = [];
-  const novosMov = []; // movimentos criados agora — serão salvos no GAS abaixo
+  const novosMov = [];
 
   function _lancarEntrada(prodId, qtdUn, it){
     const saldoAtual = getEstoque(prodId);
@@ -3651,7 +3659,8 @@ function linkDeliveryToOrders(nfEntry){
         oi.qty_entregue=(oi.qty_entregue||0)+qtdUn;
         oi.status='entregue';
         ordemAlterada = true;
-        if(!jaLancado.has(oi.prod_id)){
+        // Só cria novo movimento se ainda não existir para esta NF
+        if(!jaExiste && !jaLancado.has(oi.prod_id)){
           jaLancado.add(oi.prod_id);
           _lancarEntrada(oi.prod_id, qtdUn, nfItem);
         }
@@ -3661,14 +3670,16 @@ function linkDeliveryToOrders(nfEntry){
     if(ordemAlterada) ordensAfetadas.add(o);
   });
 
-  // 2. Lança entrada para itens vinculados sem ordem de compra
-  (nfEntry.itens||[]).forEach(it=>{
-    if(!it.matched?.length) return;
-    const prodId=it.matched[0].id;
-    if(jaLancado.has(prodId)) return;
-    const qtdUn=it.qty_unidades_final||calcQtdUn(it);
-    if(qtdUn>0){ jaLancado.add(prodId); _lancarEntrada(prodId, qtdUn, it); }
-  });
+  // 2. Lança entrada para itens vinculados sem ordem de compra (só se não jaExiste)
+  if(!jaExiste){
+    (nfEntry.itens||[]).forEach(it=>{
+      if(!it.matched?.length) return;
+      const prodId=it.matched[0].id;
+      if(jaLancado.has(prodId)) return;
+      const qtdUn=it.qty_unidades_final||calcQtdUn(it);
+      if(qtdUn>0){ jaLancado.add(prodId); _lancarEntrada(prodId, qtdUn, it); }
+    });
+  }
 
   // CRÍTICO: salva movimentos e ordens no GAS imediatamente
   // Antes faltava esta etapa — movimentos ficavam só em memória e sumiam ao recarregar
@@ -4657,12 +4668,25 @@ async function loadMainState() {
     }
 
     if(Array.isArray(loadedOrders) && loadedOrders.length > 0) {
-      purchaseOrders = loadedOrders.map(_parseGASRow).map(o => {
+      // Deduplica por id (mantém o mais recente — maior timestamp no id)
+      const ordMap = {};
+      loadedOrders.map(_parseGASRow).forEach(o => {
+        if(!o || !o.id) return;
+        const key = String(o.id);
+        const ex = ordMap[key];
+        // Prefere o que tem status mais avançado (entregue > faturado > parcial > aberto)
+        const sPrio = {entregue:4, faturado:3, parcial:2, aberto:1};
+        if(!ex || (sPrio[o.status]||0) >= (sPrio[ex.status]||0)) ordMap[key] = o;
+      });
+      purchaseOrders = Object.values(ordMap).map(o => {
         if(o.id) o.id = isNaN(o.id) ? o.id : Number(o.id);
         if(typeof o.itens === 'string') { try { o.itens = JSON.parse(o.itens); } catch(e){o.itens=[];} }
         return o;
       });
       window.purchaseOrders = purchaseOrders;
+      // CRÍTICO: inicializa _knownGASOrderIds aqui para que _saveOrderDirect
+      // use gsUpdate (não gsInsert) ao salvar mudanças de status dos pedidos
+      window._knownGASOrderIds = new Set(loadedOrders.map(r => String(r.id||'')).filter(Boolean));
       try { localStorage.setItem('fg_orders_backup', JSON.stringify(purchaseOrders)); } catch(e){}
     } else {
       try {
