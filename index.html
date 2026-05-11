@@ -2937,7 +2937,7 @@ function renderMovimentos(){
   const data=[...movimentos].reverse().filter(m=>{
     if(m.tipo==='reset') return false; // oculta sentinela de zeragem
     const p=products.find(x=>x.id==m.prod_id);
-    const mq=!q||p?.material.toLowerCase().includes(q);
+    const mq=!q||(p?.material||'').toLowerCase().includes(q);
     const mt=!ft||m.tipo===ft;
     return mq&&mt;
   });
@@ -4389,9 +4389,6 @@ async function _saveProductDirect(prod) {
 async function _saveMovimentoDirect(mov) {
   if (!mov || !mov.id) return;
   // ── BLOQUEIO GLOBAL DE CARGA INICIAL ──────────────────────────────────────
-  // Impede que qualquer código (carregarEstoquePlanilha, _drainPendingSaves,
-  // retries do gsGetAll, etc.) grave entradas de Carga Inicial quando o admin
-  // zerou o estoque intencionalmente. Único caminho que passa: o sentinela (tipo:'reset').
   if (mov.tipo !== 'reset' && (
         String(mov.resp  || '').includes('Carga Inicial') ||
         String(mov.obs   || '').includes('importado da planilha') ||
@@ -4399,17 +4396,28 @@ async function _saveMovimentoDirect(mov) {
       )) {
     if (localStorage.getItem('fg_movimentos_cleared_at')) {
       console.warn('[BLOQUEADO] Entrada de Carga Inicial suprimida (estoque zerado):', mov.id);
-      console.trace('[BLOQUEADO] chamado por:');
-      return; // ← NÃO salva no GAS
+      return;
     }
   }
   // ── FIM DO BLOQUEIO ───────────────────────────────────────────────────────
-  try {
-    await gsInsert('movimentos', mov);
-    _pendingSaves.movimentos.delete(String(mov.id));
-  } catch(e) {
-    _pendingSaves.movimentos.set(String(mov.id), mov);
-    console.warn('⚠️ Erro ao salvar movimento:', e);
+  // Retry automático 3x com backoff (500ms, 1500ms, 3000ms)
+  const delays = [0, 500, 1500];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+    try {
+      await gsInsert('movimentos', mov);
+      _pendingSaves.movimentos.delete(String(mov.id));
+      if (attempt > 0) console.log('✅ Movimento salvo após', attempt, 'tentativa(s):', mov.id);
+      return; // sucesso
+    } catch(e) {
+      console.warn(`⚠️ Tentativa ${attempt+1}/3 falhou ao salvar movimento:`, e.message||e);
+    }
+  }
+  // Todas as tentativas falharam — mantém na fila e avisa o usuário
+  _pendingSaves.movimentos.set(String(mov.id), mov);
+  console.error('❌ Movimento NÃO salvo no GAS após 3 tentativas:', mov.id);
+  if(typeof showToast === 'function') {
+    showToast('⚠️ Erro ao salvar movimentação de estoque. Verifique conexão com o banco.', 'error');
   }
 }
 
