@@ -4092,14 +4092,28 @@ async function gsInsert(sheet, data) {
   const b64 = encodeURIComponent(_toB64(JSON.stringify(data)));
   const url = `${GS_API}?action=insert&sheet=${encodeURIComponent(sheet)}&data=${b64}&enc=b64`;
   const res = await _gasFetch(url);
-  if (!res) console.warn('gsInsert falhou (sheet='+sheet+') — verifique URL do GAS');
+  if (!res) {
+    console.warn('gsInsert falhou (sheet='+sheet+') — verifique URL do GAS');
+    throw new Error('gsInsert sem resposta (sheet='+sheet+')');
+  }
+  if (res.error) {
+    console.warn('gsInsert erro GAS (sheet='+sheet+'):', res.error);
+    throw new Error('gsInsert GAS error: '+res.error);
+  }
   return res;
 }
 async function gsUpdate(sheet, id, data) {
   const b64 = encodeURIComponent(_toB64(JSON.stringify(data)));
   const url = `${GS_API}?action=update&sheet=${encodeURIComponent(sheet)}&id=${encodeURIComponent(String(id))}&data=${b64}&enc=b64`;
   const res = await _gasFetch(url);
-  if (!res) console.warn('gsUpdate falhou (sheet='+sheet+', id='+id+')');
+  if (!res) {
+    console.warn('gsUpdate falhou (sheet='+sheet+', id='+id+')');
+    throw new Error('gsUpdate sem resposta (sheet='+sheet+')');
+  }
+  if (res.error) {
+    console.warn('gsUpdate erro GAS (sheet='+sheet+', id='+id+'):', res.error);
+    throw new Error('gsUpdate GAS error: '+res.error);
+  }
   return res;
 }
 async function gsDelete(sheet, id) {
@@ -4410,25 +4424,24 @@ async function _saveMovimentoDirect(mov) {
     }
   }
   // ── FIM DO BLOQUEIO ───────────────────────────────────────────────────────
-  // Retry automático 3x com backoff (500ms, 1500ms, 3000ms)
-  const delays = [0, 500, 1500];
+  // Retry automático 3x com backoff — funciona agora que gsInsert lança exceção em falha
+  const delays = [0, 800, 2000];
   for (let attempt = 0; attempt < delays.length; attempt++) {
     if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
     try {
       await gsInsert('movimentos', mov);
       _pendingSaves.movimentos.delete(String(mov.id));
-      if (attempt > 0) console.log('✅ Movimento salvo após', attempt, 'tentativa(s):', mov.id);
+      if (attempt > 0) console.log('✅ Movimento salvo após', attempt+1, 'tentativa(s):', mov.id);
       return; // sucesso
     } catch(e) {
-      console.warn(`⚠️ Tentativa ${attempt+1}/3 falhou ao salvar movimento:`, e.message||e);
+      console.warn(`⚠️ Tentativa ${attempt+1}/3 falhou (mov ${mov.id}):`, e.message);
     }
   }
-  // Todas as tentativas falharam — mantém na fila e avisa o usuário
+  // Todas as tentativas falharam
   _pendingSaves.movimentos.set(String(mov.id), mov);
-  console.error('❌ Movimento NÃO salvo no GAS após 3 tentativas:', mov.id);
-  if(typeof showToast === 'function') {
-    showToast('⚠️ Erro ao salvar movimentação de estoque. Verifique conexão com o banco.', 'error');
-  }
+  console.error('❌ Movimento não salvo após 3 tentativas:', mov.id);
+  if(typeof showToast === 'function')
+    showToast('⚠️ Erro ao salvar movimentação. Verifique conexão com o banco.', 'error');
 }
 
 // ── Salva UMA ordem de compra/pedido no GAS ───────────────────────────────────
