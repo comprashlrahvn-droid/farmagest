@@ -369,6 +369,35 @@ tbody tr:hover{background:rgba(46,204,113,.07);}
 #vn-bg .vn-sil{animation:vnBreathe 14s ease-in-out infinite;}
 @media (prefers-reduced-motion:reduce){#vn-bg .vn-sil{animation:none;}}
 @media (max-width:900px){:root{--sb-w:210px;}#content{padding:16px;}#topbar{padding:12px 16px;}}
+/* ═══ Importação de OC / vínculo NF↔OC ═══ */
+.oc-s-pendente{background:rgba(224,162,27,.16);color:#a56a00;border:1px solid rgba(224,162,27,.45);}
+.oc-s-faturada{background:rgba(31,168,98,.12);color:#127a42;border:1px solid rgba(31,168,98,.35);}
+.oci-drop{display:block;text-align:center;padding:22px 16px;border:2px dashed #9fd0b5;border-radius:16px;background:rgba(31,168,98,.05);cursor:pointer;transition:all .15s;}
+.oci-drop:hover,.oci-drop.drag{border-color:#1fa862;background:rgba(31,168,98,.12);}
+.oci-card{border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-top:14px;background:#fff;}
+.oci-card.off{opacity:.55;}
+.oci-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+.oci-meta{display:flex;gap:10px;flex-wrap:wrap;}
+.oci-meta>div{flex:1;min-width:130px;}
+.oci-meta label{display:block;font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:3px;}
+.oci-tab{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:8px;}
+.oci-tab th{background:#eaf4ee;color:var(--text3);font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;text-align:left;white-space:nowrap;}
+.oci-tab td{padding:4px 8px;border-bottom:1px solid rgba(20,120,70,.08);vertical-align:middle;}
+.oci-in{background:#fff;border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:.78rem;color:var(--text);font-family:inherit;}
+.oci-in:focus{outline:none;border-color:#1fa862;box-shadow:0 0 0 2px rgba(31,168,98,.15);}
+.oci-foot{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;}
+.oci-raw{max-height:180px;overflow:auto;background:#f2f8f4;border-radius:8px;padding:8px;font-size:.68rem;white-space:pre-wrap;color:var(--text2);margin-top:6px;}
+.oci-busca{background:#f2f8f4;padding:8px!important;}
+.oci-sug{padding:6px 8px;border-radius:6px;cursor:pointer;font-size:.78rem;}
+.oci-sug:hover{background:#dff0e6;}
+.oci-prog{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:.76rem;color:var(--text2);}
+.oci-nf-banner{background:rgba(31,168,98,.09);border:1px solid rgba(31,168,98,.3);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:.8rem;}
+.oci-nf-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(20,120,70,.25);}
+.oci-lbl{font-size:.7rem;font-weight:800;color:#127a42;white-space:nowrap;}
+.oci-sel{flex:1;min-width:240px;font-size:.76rem!important;padding:5px 8px!important;}
+.oci-ok{font-size:.74rem;font-weight:700;color:#127a42;}
+
+.badge-blue{background:rgba(37,99,235,.10)!important;color:#1d4fa8!important;border:1px solid rgba(37,99,235,.25);}
 </style>
 </head>
 <body>
@@ -6749,7 +6778,7 @@ function aplicarRenomeacoes() {
         const t = document.getElementById('page-title');
         if (t) t.textContent = 'Ordem de Compra';
         const topbar = document.getElementById('topbar-actions');
-        if (topbar) topbar.innerHTML = `<button class="btn btn-primary" onclick="abrirModalNovaOC()">+ Nova OC</button>`;
+        if (topbar) topbar.innerHTML = `<button class="btn btn-primary" onclick="abrirImportOC()">📥 Importar OC (PDF / Excel / CSV)</button>`;
         renderOCPage();
         return;
       }
@@ -6822,6 +6851,8 @@ function adicionarPaginaOC() {
       </div>
       <select class="filter-select" id="filter-oc-status" onchange="filtrarOCs()">
         <option value="">Todos os status</option>
+        <option value="pendente">⏳ Pendente</option>
+        <option value="faturada">🧾 Faturada</option>
         <option value="rascunho">📝 Rascunho</option>
         <option value="enviada">📤 Enviada</option>
         <option value="parcial">🔵 Parcialmente atendida</option>
@@ -6832,7 +6863,7 @@ function adicionarPaginaOC() {
     </div>
     <div id="oc-save-status" style="display:none;font-size:0.78rem;padding:6px 12px;border-radius:6px;margin-bottom:8px;"></div>
     <div id="oc-list-body">
-      <div class="empty-state"><div class="icon">🗂️</div><p>Nenhuma Ordem de Compra. Clique em <b>+ Nova OC</b> para começar.</p></div>
+      <div class="empty-state"><div class="icon">🗂️</div><p>Nenhuma Ordem de Compra importada. Clique em <b>📥 Importar OC</b> e envie o PDF, Excel ou CSV.</p></div>
     </div>
   `;
   content.appendChild(page);
@@ -8194,6 +8225,8 @@ window.renderOCPage = function() {
   }
 
   const statusLabel = {
+    pendente: '<span class="oc-badge-status oc-s-pendente">⏳ Pendente</span>',
+    faturada: '<span class="oc-badge-status oc-s-faturada">🧾 Faturada</span>',
     rascunho: '<span class="oc-badge-status oc-s-rascunho">📝 Rascunho</span>',
     enviada: '<span class="oc-badge-status oc-s-enviada">📤 Enviada</span>',
     parcial: '<span class="oc-badge-status oc-s-parcial">🔵 Parcial</span>',
@@ -8224,16 +8257,14 @@ window.renderOCPage = function() {
         </div>
       </div>
       ${emailBadge ? `<div style="margin-top:6px">${emailBadge}</div>` : ''}
+      ${window.ocResumoHTML ? window.ocResumoHTML(oc) : ''}
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         ${oc.cond_pgto ? `<span class="badge badge-gray" style="font-size:0.72rem">💳 ${oc.cond_pgto}</span>` : ''}
         ${oc.prev_entrega ? `<span class="badge badge-blue" style="font-size:0.72rem">📅 Prev: ${formatarData(oc.prev_entrega)}</span>` : ''}
         ${oc.criado_por ? `<span class="badge badge-gray" style="font-size:0.72rem">👤 ${oc.criado_por}</span>` : ''}
       </div>
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-secondary" onclick="editarOC('${oc.id}')">✏️ Editar</button>
-        <button class="btn btn-sm btn-secondary" onclick="downloadPDFOC('${oc.id}')">⬇️ PDF</button>
-        <button class="btn btn-sm btn-secondary" onclick="downloadXMLOC('${oc.id}')">📄 XML</button>
-        <button class="btn btn-sm btn-primary" onclick="enviarOCFornecedor('${oc.id}')">📤 Enviar</button>
+        ${window.ocBotoesHTML ? window.ocBotoesHTML(oc) : ''}
         ${oc.status !== 'cancelada' ? `<button class="btn btn-sm btn-danger" onclick="cancelarOC('${oc.id}')">🚫 Cancelar</button>` : ''}
         <button class="btn btn-sm btn-danger" style="opacity:0.7" onclick="excluirOC('${oc.id}')">🗑️ Excluir</button>
       </div>
@@ -8509,7 +8540,7 @@ function _atualizarOCSaveStatus() {
 // Roda uma vez no carregamento e sempre que renderOCPage e chamado.
 function dedupOCList() {
   if (!window._ocList || !window._ocList.length) return;
-  const statusPrio = {enviada:4, atendida:3, parcial:2, rascunho:1, cancelada:0};
+  const statusPrio = {enviada:4, atendida:3, faturada:3, parcial:2, pendente:2, rascunho:1, cancelada:0};
   const mapa = {};
   window._ocList.forEach(function(oc) {
     // Chave primaria: numero da OC. Fallback: id.
@@ -8617,7 +8648,7 @@ if (_origGerarPedido) {
 function atualizarOCsComPedido() {
   let atualizado = false;
   window._ocList.forEach(oc => {
-    if (oc.status === 'cancelada' || oc.status === 'atendida') return;
+    if (oc.status === 'cancelada' || oc.status === 'atendida' || oc.origem === 'import') return;
     oc.itens.forEach(it => {
       if (!it.prod_id) return;
       const prod = (window.products || []).find(p => p.id == it.prod_id);
@@ -8807,6 +8838,753 @@ window.renderNFHistorico = function() {
 console.log('✅ PATCH VILA NOVA carregado com sucesso!');
 
 })(); // fim do IIFE
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   FARMAGEST • ORDEM DE COMPRA = IMPORTAÇÃO (PDF / Excel / CSV)
+   - Lê a OC, identifica itens por código (produto + item do pedido)
+   - NF (XML): comprador vincula cada item da nota ao item da OC
+   - Uma OC pode gerar várias NFs; o que não faturou fica pendente
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+/* ───────────────────────── utilitários ───────────────────────── */
+var HOSP_CNPJ_RAIZ='04994418';
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function semAcento(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function normCod(c){return String(c==null?'':c).toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/^0+(?=.)/,'');}
+function num(v){
+  if(typeof v==='number') return isFinite(v)?v:0;
+  var t=String(v==null?'':v).replace(/R\$|\s/g,'').replace(/[^\d.,\-]/g,'');
+  if(!t||t==='-') return 0;
+  var hasC=t.indexOf(',')>=0, hasD=t.indexOf('.')>=0;
+  if(hasC&&hasD){ if(t.lastIndexOf(',')>t.lastIndexOf('.')) t=t.replace(/\./g,'').replace(',','.'); else t=t.replace(/,/g,''); }
+  else if(hasC) t=t.replace(',','.');
+  else if(hasD && /^-?\d{1,3}(\.\d{3})+$/.test(t)) t=t.replace(/\./g,'');
+  var n=parseFloat(t); return isFinite(n)?n:0;
+}
+function ehNumero(s){var t=String(s==null?'':s).replace(/R\$|\s/g,''); return t!==''&&(/^-?\d[\d.]*(,\d+)?$/.test(t)||/^-?\d+(\.\d+)?$/.test(t));}
+function isoData(v){
+  if(v instanceof Date && !isNaN(v)){var d=new Date(v.getTime()+12*3600*1000);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  var t=String(v==null?'':v).trim(), m=t.match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
+  if(m){var y=m[3]; if(y.length===2) y='20'+y; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');}
+  m=t.match(/(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:'';
+}
+function fmtData(d){var m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:String(d||'—');}
+function brl(v){return (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function fmtQtd(v){var n=Number(v)||0; return Number.isInteger(n)?String(n):n.toLocaleString('pt-BR',{maximumFractionDigits:3});}
+function listaOC(){ if(!Array.isArray(window._ocList)) window._ocList=[]; return window._ocList; }
+function listaPedidos(){ try{ return (typeof purchaseOrders!=='undefined'&&purchaseOrders)||window.purchaseOrders||[]; }catch(e){ return window.purchaseOrders||[]; } }
+function listaProdutos(){ try{ return (typeof products!=='undefined'&&products)||window.products||[]; }catch(e){ return window.products||[]; } }
+function ehImportada(oc){return !!oc&&oc.origem==='import';}
+
+/* ───────────────────────── papéis de coluna ───────────────────────── */
+function papelDe(h){
+  var t=semAcento(h).toLowerCase().replace(/[º°]/g,'o').replace(/\s+/g,' ').trim(); if(!t) return null;
+  if(/^(n(umero|um|o|\.)?\s*\.?\s*(da |do )?)?(oc|o\.c\.|ordem( de compra)?|pedido( de compra)?)\s*(n(umero|um|o)?\.?)?$/.test(t)||/n(umero|um|o)?\.?\s*(da |do )?(oc|ordem|pedido)/.test(t)) return 'oc';
+  if(/fornecedor|razao social/.test(t)) return 'forn';
+  if(/cnpj/.test(t)) return 'cnpj';
+  if(/(entrega|prazo)/.test(t)&&!/pagamento/.test(t)) return 'entrega';
+  if(/^data|emissao/.test(t)) return 'data';
+  if(/^(item|seq|sq|#|n|no|ord)$/.test(t)) return 'seq';
+  if(/cod|\bref\b|referencia|sku/.test(t)) return 'cod';
+  if(/qtd|quant/.test(t)) return 'qtd';
+  if(/(valor|vl|preco|pr)\.?\s*(unit|un\b)|unitario|^preco/.test(t)) return 'vunit';
+  if(/total/.test(t)) return 'vtotal';
+  if(/^(un|und|unid|unidade|um|emb|embalagem|apres)/.test(t)) return 'un';
+  if(/descri|produto|material|medicamento|nome|item$/.test(t)) return 'desc';
+  return null;
+}
+function contaPapeis(celulas){
+  var set={}; celulas.forEach(function(c){var r=papelDe(c); if(r) set[r]=1;}); return Object.keys(set);
+}
+function achaCabecalho(linhas){
+  var melhor=-1, melhorN=0;
+  for(var i=0;i<Math.min(linhas.length,120);i++){
+    var ps=contaPapeis(linhas[i].cells.map(function(c){return c.s;}));
+    if(ps.indexOf('qtd')<0||(ps.indexOf('desc')<0&&ps.indexOf('cod')<0)) continue;
+    if(ps.length>melhorN){melhorN=ps.length;melhor=i;}
+  }
+  return melhorN>=3?melhor:-1;
+}
+
+/* ───────────────────────── extração de metadados ───────────────────────── */
+function metaDe(linhas){
+  var m={numero:'',fornecedor:'',cnpj:'',data:'',entrega:'',cond:'',total:0};
+  var segs=[]; linhas.forEach(function(l){String(l).split(/\s{2,}/).forEach(function(x){if(x.trim()) segs.push(x.trim());});});
+  var i, t;
+  var RX_NUM=/(?:ordem\s+de\s+compra|pedido\s+de\s+compra|\bO\.?\s?C\.?\b|pedido|n[º°o]\.?\s*(?:da\s*)?(?:oc|ordem|pedido))\s*(?:n[º°o]\.?|n[úu]mero|num\.?|#)?\s*[:\-]?\s*([A-Z]{0,4}\d[\d\-\/\.]{1,})/i;
+  for(i=0;i<linhas.length&&!m.numero;i++){ t=linhas[i]; var mm=t.match(RX_NUM); if(mm) m.numero=mm[1].replace(/[\.\-\/]+$/,''); }
+  for(i=0;i<segs.length;i++){
+    t=segs[i];
+    if(!m.entrega&&/entrega|prazo/i.test(t)&&!/pagamento/i.test(t)){ var dd=isoData(t)||(segs[i+1]&&!/[a-z]{3}/i.test(segs[i+1])?isoData(segs[i+1]):''); if(dd) m.entrega=dd; }
+  }
+  for(i=0;i<segs.length&&!m.data;i++){
+    t=segs[i]; if(/entrega|prazo|vencimento/i.test(t)) continue;
+    if(/emiss|data|dt\./i.test(t)){ var d2=isoData(t)||(segs[i+1]&&!/[a-z]{3}/i.test(segs[i+1])?isoData(segs[i+1]):''); if(d2) m.data=d2; }
+  }
+  if(!m.data){ for(i=0;i<segs.length;i++){ if(!/entrega|prazo|vencimento/i.test(segs[i])&&isoData(segs[i])){m.data=isoData(segs[i]);break;} } }
+  var cnpjs=[]; linhas.forEach(function(l){ (l.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g)||[]).forEach(function(c){cnpjs.push(c);}); });
+  for(i=0;i<cnpjs.length;i++){ if(cnpjs[i].replace(/\D/g,'').indexOf(HOSP_CNPJ_RAIZ)!==0){ m.cnpj=cnpjs[i]; break; } }
+  var RX_FORN=/(?:fornecedor|raz[ãa]o\s*social|empresa)\s*[:\-]?\s*(.*)$/i;
+  for(i=0;i<linhas.length&&!m.fornecedor;i++){
+    var f=linhas[i].match(RX_FORN); if(!f) continue;
+    var v=f[1].replace(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}.*$/,'').replace(/\bcnpj\b.*$/i,'').replace(/[:\-\s]+$/,'').trim();
+    if(!v&&linhas[i+1]) v=linhas[i+1].replace(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}.*$/,'').trim();
+    if(v&&!/hospital|vila nova|lauro reus|associa[çc][ãa]o/i.test(v)) m.fornecedor=v;
+  }
+  for(i=0;i<linhas.length&&!m.cond;i++){
+    var c=linhas[i].match(/(?:cond(?:i[çc][ãa]o|\.)?\s*(?:de\s*)?pag(?:amento|to)?\.?|prazo\s+de\s+pagamento)\s*[:\-]?\s*(.+)$/i);
+    if(c) m.cond=c[1].trim().slice(0,60);
+  }
+  for(i=0;i<linhas.length;i++){
+    var tt=linhas[i].match(/(?:valor\s+total|total\s+geral|total\s+do\s+pedido|total\s+da\s+(?:oc|ordem))[^\d\-]{0,25}(?:R\$\s*)?(\d[\d\.]*,\d{2})/i);
+    if(tt) m.total=num(tt[1]);
+  }
+  return m;
+}
+
+/* ───────────────────────── itens a partir de uma "grade" ───────────────────────── */
+function itensDeGrade(papeis, grade, ehPDF){
+  var out=[], idx=function(r){return papeis.indexOf(r);}, prevY=null, parou=false;
+  grade.forEach(function(lin){
+    if(parou) return;
+    var arr=lin.arr, txt=arr.join(' ').replace(/\s+/g,' ').trim(); if(!txt) return;
+    var g=function(r){var i=idx(r); return i>=0?String(arr[i]==null?'':arr[i]).trim():'';};
+    if(contaPapeis(arr).length>=3) return;                              // cabeçalho repetido (outra página)
+    if(/p[áa]gina\s*\d|^\d+\s*\/\s*\d+$/i.test(txt)) return;
+    var qtd=num(g('qtd')), cod=g('cod'), desc=g('desc');
+    if(!(qtd>0)&&!cod&&/^(valor\s+)?(sub)?total\b|^total\s+geral|observa|assinatura|condi[çc]/i.test(semAcento(txt))){ if(out.length) parou=true; return; }
+    if(qtd>0&&(cod||desc)){
+      var vu=num(g('vunit')), vt=num(g('vtotal'));
+      if(!vu&&vt) vu=vt/qtd; if(!vt&&vu) vt=vu*qtd;
+      out.push({seq:out.length+1,codigo:cod,descricao:desc,unidade:g('un'),quantidade:qtd,valor_unit:vu,valor_total:vt,oc_num:g('oc'),forn:g('forn'),cnpj:g('cnpj'),data:g('data'),entrega:g('entrega')});
+      prevY=lin.y;
+    } else if(out.length&&!cod&&desc&&!(qtd>0)){
+      var pertoOk=!ehPDF||prevY==null||lin.y==null||Math.abs(prevY-lin.y)<=18;
+      if(pertoOk){ out[out.length-1].descricao=(out[out.length-1].descricao+' '+desc).trim(); if(lin.y!=null) prevY=lin.y; }
+    }
+  });
+  return out;
+}
+
+/* Fallback sem cabeçalho (PDF): linha com código + ... + qtd + unit + total */
+function itensPorRegex(linhasTxt){
+  var out=[], RXM=/(\d[\d\.]*,\d{2,4})/g;
+  linhasTxt.forEach(function(t){
+    var money=t.match(RXM); if(!money||money.length<2) return;
+    if(/total|subtotal|frete|desconto|ipi/i.test(semAcento(t))&&!/^\s*\S+\s+\S+/.test(t)) return;
+    var mm=t.match(/^\s*(?:(\d{1,3})\s+)?([A-Za-z0-9][\w\.\-\/]{1,15})\s+(.+?)\s+(\d[\d\.]*(?:,\d+)?)\s+(?:([A-Za-z]{1,6})\s+)?(\d[\d\.]*,\d{2,4})\s+(\d[\d\.]*,\d{2})\s*$/);
+    if(!mm) return;
+    var q=num(mm[4]); if(!(q>0)) return;
+    out.push({seq:out.length+1,codigo:mm[2],descricao:mm[3].trim(),unidade:mm[5]||'',quantidade:q,valor_unit:num(mm[6]),valor_total:num(mm[7]),oc_num:'',forn:'',cnpj:'',data:'',entrega:''});
+  });
+  return out;
+}
+
+function colMaisProxima(c,hc){
+  var best=0,bd=1e9,cx=(c.x+c.x2)/2, num=ehNumero(c.s)||/^R\$/.test(c.s);
+  hc.forEach(function(k,ki){
+    var hcx=(k.x+k.x2)/2, d=num?Math.min(Math.abs(c.x2-k.x2),Math.abs(cx-hcx)):Math.min(Math.abs(c.x-k.x),Math.abs(cx-hcx));
+    if(d<bd){bd=d;best=ki;}
+  });
+  return {i:best,d:bd};
+}
+/* ───────────────────────── montagem do rascunho de OC ───────────────────────── */
+function montarRascunhos(linhas, ehPDF, arquivo, formato){
+  // linhas: [{cells:[{s,x,x2}], y, text}]
+  var textos=linhas.map(function(l){return l.text;});
+  var h=achaCabecalho(linhas), itens=[], meta, aviso=[], papeis=[], antes=textos;
+  if(h>=0){
+    var hdr=linhas[h], hc=hdr.cells.map(function(c){return {s:c.s,x:c.x,x2:c.x2};}), ini=h+1;
+    if(ehPDF){
+      [h-1,h+1].forEach(function(j){
+        var l=linhas[j]; if(!l||Math.abs((l.y||0)-(hdr.y||0))>20) return;
+        if(l.cells.some(function(c){return /\d/.test(c.s);})||l.cells.some(function(c){return c.s.length>20;})) return;
+        l.cells.forEach(function(c){
+          var m=colMaisProxima(c,hc);
+          if(m.d<70) hc[m.i].s=(j<h?c.s+' '+hc[m.i].s:hc[m.i].s+' '+c.s);
+        });
+        if(j===h+1) ini=h+2;
+      });
+    }
+    papeis=hc.map(function(c){return papelDe(c.s);});
+    var grade=[];
+    if(ehPDF){
+      for(var i=ini;i<linhas.length;i++){
+        var arr=hc.map(function(){return '';});
+        linhas[i].cells.forEach(function(c){
+          var m=colMaisProxima(c,hc);
+          arr[m.i]=(arr[m.i]?arr[m.i]+' ':'')+c.s;
+        });
+        grade.push({arr:arr,y:linhas[i].y});
+      }
+    } else {
+      var larg=hdr.cells.length; papeis=hdr.cells.map(function(c){return papelDe(c.s);});
+      for(var i2=ini;i2<linhas.length;i2++){ grade.push({arr:linhas[i2].cells.map(function(c){return c.s;}),y:null}); }
+    }
+    itens=itensDeGrade(papeis,grade,ehPDF);
+    antes=textos.slice(0,h);
+  }
+  if(!itens.length&&ehPDF){ itens=itensPorRegex(textos); if(itens.length) aviso.push('Cabeçalho da tabela não reconhecido — itens lidos por padrão de linha. Confira as colunas.'); }
+  meta=metaDe(antes.length?antes:textos);
+  if(!meta.numero||!meta.fornecedor) meta=Object.assign({},metaDe(textos),{});
+  // grupos por nº de OC (planilhas com várias OCs)
+  var grupos={}; var ordem=[];
+  itens.forEach(function(it){ var k=it.oc_num||meta.numero||''; if(!grupos[k]){grupos[k]=[];ordem.push(k);} grupos[k].push(it); });
+  var resultado=[];
+  ordem.forEach(function(k){
+    var its=grupos[k], p=its[0];
+    its.forEach(function(it,i){it.seq=i+1;});
+    resultado.push({
+      arquivo:arquivo, formato:formato,
+      meta:{numero:k||'', fornecedor:p.forn||meta.fornecedor||'', cnpj:p.cnpj||meta.cnpj||'', data:isoData(p.data)||meta.data||'', entrega:isoData(p.entrega)||meta.entrega||'', cond:meta.cond||''},
+      itens:its, aviso:aviso.slice(), texto:textos.join('\n'), incluir:true
+    });
+  });
+  if(!resultado.length){
+    resultado.push({arquivo:arquivo,formato:formato,meta:{numero:meta.numero||'',fornecedor:meta.fornecedor||'',cnpj:meta.cnpj||'',data:meta.data||'',entrega:meta.entrega||'',cond:meta.cond||''},itens:[],aviso:['Não consegui identificar a tabela de itens neste arquivo. Veja o texto lido abaixo ou adicione os itens manualmente.'],texto:textos.join('\n'),incluir:true});
+  }
+  resultado.forEach(function(r){ if(!r.meta.numero){ var f=String(arquivo||'').match(/(\d{3,})/); if(f) r.meta.numero=f[1]; } });
+  return resultado;
+}
+
+/* ───────────────────────── leitura de arquivos ───────────────────────── */
+function carregaScript(url){return new Promise(function(res,rej){var s=document.createElement('script');s.src=url;s.onload=res;s.onerror=function(){rej(new Error('Falha ao carregar '+url));};document.head.appendChild(s);});}
+var PDFJS_V='3.11.174';
+function garantePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return carregaScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/'+PDFJS_V+'/pdf.min.js').then(function(){
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/'+PDFJS_V+'/pdf.worker.min.js';
+    return window.pdfjsLib;
+  }).catch(function(){ throw new Error('Não foi possível carregar o leitor de PDF. Verifique a conexão com a internet.'); });
+}
+function lerPDF(file){
+  return garantePdfJs().then(function(pdfjs){
+    return file.arrayBuffer().then(function(buf){return pdfjs.getDocument({data:buf}).promise;});
+  }).then(function(pdf){
+    var todas=[], p=Promise.resolve();
+    for(var n=1;n<=pdf.numPages;n++){ (function(n){
+      p=p.then(function(){return pdf.getPage(n);}).then(function(page){return page.getTextContent();}).then(function(tc){
+        var its=tc.items.filter(function(i){return i.str&&i.str.trim()!=='';}).map(function(i){return {s:i.str,x:i.transform[4],y:i.transform[5],w:i.width||0};});
+        its.sort(function(a,b){return (b.y-a.y)||(a.x-b.x);});
+        var rows=[];
+        its.forEach(function(it){
+          var r=rows.length?rows[rows.length-1]:null;
+          if(r&&Math.abs(r.y-it.y)<=3) r.its.push(it); else rows.push({y:it.y,its:[it]});
+        });
+        rows.forEach(function(r){
+          r.its.sort(function(a,b){return a.x-b.x;});
+          var cells=[];
+          r.its.forEach(function(it){
+            var c=cells[cells.length-1], fim=it.x+it.w;
+            if(c&&(it.x-c.x2)<=5) { c.s+=(it.x-c.x2>1?' ':'')+it.s; c.x2=Math.max(c.x2,fim); }
+            else cells.push({s:it.s,x:it.x,x2:fim});
+          });
+          cells.forEach(function(c){c.s=c.s.replace(/\s+/g,' ').trim();});
+          todas.push({y:r.y+(n*-10000)*0,cells:cells.filter(function(c){return c.s;}),text:cells.map(function(c){return c.s;}).join('  ').trim(),pg:n});
+        });
+      });
+    })(n); }
+    return p.then(function(){ return todas.filter(function(l){return l.cells.length;}); });
+  });
+}
+function lerGrade(matriz){
+  return matriz.map(function(row){
+    var cells=row.map(function(v){return {s:(v instanceof Date)?isoData(v):String(v==null?'':v).trim(),x:0,x2:0};});
+    return {cells:cells,y:null,text:cells.map(function(c){return c.s;}).filter(Boolean).join('  ')};
+  }).filter(function(l){return l.text;});
+}
+function parseCSV(texto){
+  var linhas=texto.replace(/^\uFEFF/,'').split(/\r?\n/).filter(function(l){return l.trim()!=='';});
+  var amostra=linhas.slice(0,15).join('\n');
+  var delims=[';','\t',','], d=';', best=-1;
+  delims.forEach(function(c){var n=(amostra.match(new RegExp(c==='\t'?'\\t':'\\'+c,'g'))||[]).length; if(n>best){best=n;d=c;}});
+  var rows=[];
+  linhas.forEach(function(l){
+    var out=[],cur='',q=false;
+    for(var i=0;i<l.length;i++){
+      var ch=l[i];
+      if(q){ if(ch==='"'){ if(l[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+      else if(ch==='"') q=true; else if(ch===d){out.push(cur);cur='';} else cur+=ch;
+    }
+    out.push(cur); rows.push(out);
+  });
+  return rows;
+}
+function lerCSV(file){
+  return file.arrayBuffer().then(function(buf){
+    var t=new TextDecoder('utf-8').decode(buf); if(t.indexOf('\uFFFD')>=0) t=new TextDecoder('windows-1252').decode(buf);
+    return lerGrade(parseCSV(t));
+  });
+}
+function lerExcel(file){
+  return file.arrayBuffer().then(function(buf){
+    if(!window.XLSX) throw new Error('Biblioteca de Excel não carregada. Verifique a conexão com a internet.');
+    var wb=XLSX.read(buf,{type:'array',cellDates:true}), blocos=[];
+    wb.SheetNames.forEach(function(n){
+      var m=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});
+      var linhas=lerGrade(m); if(linhas.length) blocos.push({nome:n,linhas:linhas});
+    });
+    return blocos;
+  });
+}
+function lerArquivo(file){
+  var nome=file.name||'', ext=(nome.split('.').pop()||'').toLowerCase();
+  if(ext==='pdf') return lerPDF(file).then(function(l){return montarRascunhos(l,true,nome,'pdf');});
+  if(ext==='csv'||ext==='txt') return lerCSV(file).then(function(l){return montarRascunhos(l,false,nome,'csv');});
+  if(ext==='xlsx'||ext==='xls'||ext==='xlsm') return lerExcel(file).then(function(blocos){
+    var res=[]; blocos.forEach(function(b){ montarRascunhos(b.linhas,false,nome+(blocos.length>1?' ['+b.nome+']':''),'excel').forEach(function(r){ if(r.itens.length||blocos.length===1) res.push(r); }); });
+    return res.length?res:montarRascunhos([],false,nome,'excel');
+  });
+  return Promise.reject(new Error('Formato não suportado: '+nome+' (use PDF, Excel ou CSV).'));
+}
+
+/* ───────────────────────── identificação por código ───────────────────────── */
+function acharProduto(cod,desc){
+  var n=normCod(cod), P=listaProdutos();
+  if(n){
+    var p=P.find(function(x){return normCod(x.cod_bionexo)===n;})||P.find(function(x){return normCod(x.cod_hlr)===n;});
+    if(p) return {prod:p,via:'codigo'};
+  }
+  if(desc&&typeof matchScore==='function'){
+    var melhor=null,bs=0, d=String(desc).toLowerCase();
+    P.forEach(function(x){ var s=matchScore(d,String(x.material||'').toLowerCase()); if(s>bs){bs=s;melhor=x;} });
+    if(melhor&&bs>=0.75) return {prod:melhor,via:'nome'};
+  }
+  return null;
+}
+function acharPedidoItem(prodId,excluirIds){
+  if(!prodId) return null;
+  var lista=listaPedidos().filter(function(o){return o.status!=='entregue'&&o.status!=='cancelado';}).slice().sort(function(a,b){return String(a.data||'').localeCompare(String(b.data||''));});
+  for(var i=0;i<lista.length;i++){
+    var o=lista[i], it=(o.itens||[]).find(function(x){return String(x.prod_id)===String(prodId)&&(x.qty_faturada||0)<(x.qty_pedido||0)&&x.status!=='entregue';});
+    if(it) return {pedido:o,item:it};
+  }
+  return null;
+}
+function identificar(it){
+  var r=acharProduto(it.codigo,it.descricao);
+  if(r){ it.prod_id=r.prod.id; it.prod_nome=r.prod.material; it.match=r.via; } else { it.prod_id=null; it.prod_nome=''; it.match=null; }
+  var pe=acharPedidoItem(it.prod_id);
+  if(pe){ it.pedido_id=pe.pedido.id; it.pedido_numero=pe.pedido.numero; it.qty_pedido=pe.item.qty_pedido; } else { it.pedido_id=null; it.pedido_numero=''; it.qty_pedido=0; }
+}
+
+/* ───────────────────────── status (item / OC) ───────────────────────── */
+function pendente(oi){
+  if(oi.saldo_encerrado||oi.status==='cancelado') return 0;
+  return Math.max(0,(Number(oi.quantidade)||0)-(Number(oi.qty_faturada)||0));
+}
+function statusItem(oi){
+  var q=Number(oi.quantidade)||0, f=Number(oi.qty_faturada)||0, e=Number(oi.qty_entregue)||0;
+  if(oi.status==='cancelado'||(oi.saldo_encerrado&&f===0)) return 'cancelado';
+  if(q>0&&e>=q) return 'entregue';
+  if((q>0&&f>=q)||(oi.saldo_encerrado&&f>0)) return (oi.saldo_encerrado&&e>=f&&f>0)?'entregue':'faturado';
+  if(f>0) return 'parcial';
+  return 'pendente';
+}
+function recalcOC(oc){
+  if(!oc||oc.status==='cancelada') return;
+  var its=(oc.itens||[]); its.forEach(function(i){i.status=statusItem(i);});
+  var at=its.filter(function(i){return i.status!=='cancelado';});
+  if(!at.length) return;
+  if(at.every(function(i){return i.status==='entregue';})) oc.status='atendida';
+  else if(at.every(function(i){return i.status==='faturado'||i.status==='entregue';})) oc.status='faturada';
+  else if(at.some(function(i){return (i.qty_faturada||0)>0;})) oc.status='parcial';
+  else oc.status='pendente';
+}
+
+/* ───────────────────────── persistência compacta (POST) ───────────────────────── */
+var _origSaveOC=window._saveOCDirect;
+function enxuga(oc){
+  var cp=Object.assign({},oc);
+  cp.itens=(oc.itens||[]).map(function(i){
+    var o={seq:i.seq,codigo:i.codigo,descricao:i.descricao,unidade:i.unidade,quantidade:i.quantidade,valor_unit:i.valor_unit,prod_id:i.prod_id,prod_nome:i.prod_nome,pedido_id:i.pedido_id,pedido_numero:i.pedido_numero,qty_faturada:i.qty_faturada||0,qty_entregue:i.qty_entregue||0,status:i.status};
+    if(i.nfs&&i.nfs.length) o.nfs=i.nfs; if(i.saldo_encerrado) o.saldo_encerrado=true; if(i.match) o.match=i.match;
+    return o;
+  });
+  return cp;
+}
+async function salvarImportada(oc){
+  var ser=enxuga(oc); ser.itens=JSON.stringify(ser.itens);
+  var json=JSON.stringify(ser);
+  if(json.length>45000) console.warn('OC muito grande para uma célula ('+json.length+' chars).');
+  if(!window._knownGASOCIds) window._knownGASOCIds=new Set();
+  var ja=window._knownGASOCIds.has(String(oc.id)), ok=false;
+  try{
+    var url=(typeof GS_API!=='undefined')?GS_API:null;
+    if(url){
+      var body=ja?{action:'update',sheet:'oc_list',id:oc.id,data:{json:json}}:{action:'insert',sheet:'oc_list',data:ser};
+      var r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+      var j=await r.json();
+      ok=!!(j&&(j.status==='ok'));
+      if(j&&j.status==='not_found'&&ja){ window._knownGASOCIds.delete(String(oc.id)); return salvarImportada(oc); }
+    }
+  }catch(e){ console.warn('POST OC falhou, usando caminho padrão:',e); }
+  if(ok){ window._knownGASOCIds.add(String(oc.id)); try{ _pendingSaves.ocs.delete(String(oc.id)); }catch(e){} return; }
+  if(_origSaveOC) return _origSaveOC(enxugaParaPadrao(oc));
+}
+function enxugaParaPadrao(oc){ var c=enxuga(oc); return c; }
+window._saveOCDirect=function(oc){
+  if(ehImportada(oc)) return salvarImportada(oc);
+  return _origSaveOC?_origSaveOC.apply(this,arguments):Promise.resolve();
+};
+function salvarOCImport(oc){
+  var L=listaOC(), i=L.findIndex(function(x){return String(x.id)===String(oc.id);});
+  if(i>=0) L[i]=oc; else L.push(oc);
+  window._lastOCSaveTime=Date.now();
+  try{ if(window._pendingSaves) window._pendingSaves.ocs.set(String(oc.id),oc); }catch(e){}
+  return window._saveOCDirect(oc).then(function(){ window._lastOCSaveTime=Date.now(); try{_atualizarOCSaveStatus();}catch(e){} }).catch(function(){});
+}
+
+/* ───────────────────────── MODAL DE IMPORTAÇÃO ───────────────────────── */
+var S={ocs:[],busca:null,lendo:false};
+function garanteModal(){
+  if($('modal-oc-import')) return;
+  var d=document.createElement('div'); d.className='modal-overlay'; d.id='modal-oc-import';
+  d.innerHTML='<div class="modal" style="max-width:1180px;width:96vw;max-height:92vh">'+
+    '<div class="modal-header"><h3>📥 Importar Ordem de Compra</h3><button class="modal-close" onclick="OCI.fechar()">✕</button></div>'+
+    '<div class="modal-body">'+
+      '<label class="oci-drop" id="oci-drop" for="oci-file">'+
+        '<div style="font-size:1.7rem">📄 📊 🧾</div>'+
+        '<div style="font-weight:700;margin:6px 0 2px">Arraste os arquivos aqui ou clique para escolher</div>'+
+        '<div style="font-size:.78rem;color:var(--text3)">PDF, Excel (.xlsx / .xls) ou CSV — pode selecionar várias OCs de uma vez</div>'+
+        '<input type="file" id="oci-file" multiple accept=".pdf,.xlsx,.xls,.xlsm,.csv,.txt" style="display:none" onchange="OCI.arquivos(this.files);this.value=\'\'">'+
+      '</label>'+
+      '<div id="oci-status" style="font-size:.82rem;margin:10px 0"></div>'+
+      '<div id="oci-lista"></div>'+
+    '</div>'+
+    '<div class="modal-footer"><span id="oci-resumo" style="margin-right:auto;font-size:.8rem;color:var(--text2)"></span>'+
+      '<button class="btn btn-secondary" onclick="OCI.fechar()">Cancelar</button>'+
+      '<button class="btn btn-primary" id="oci-salvar" onclick="OCI.salvar()" disabled>Salvar como pendente</button></div>'+
+  '</div>';
+  document.body.appendChild(d);
+  var dz=$('oci-drop');
+  ['dragenter','dragover'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('drag');});});
+  ['dragleave','drop'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('drag');});});
+  dz.addEventListener('drop',function(e){ if(e.dataTransfer&&e.dataTransfer.files) OCI.arquivos(e.dataTransfer.files); });
+}
+function abrir(){ garanteModal(); S.ocs=[]; S.busca=null; renderImport(); $('oci-status').innerHTML=''; $('modal-oc-import').classList.add('open'); }
+function fechar(){ var m=$('modal-oc-import'); if(m) m.classList.remove('open'); }
+function arquivos(files){
+  if(S.lendo) return; var arr=Array.prototype.slice.call(files||[]); if(!arr.length) return;
+  S.lendo=true; var st=$('oci-status'); st.innerHTML='⏳ Lendo '+arr.length+' arquivo(s)…';
+  var erros=[], p=Promise.resolve();
+  arr.forEach(function(f){ p=p.then(function(){ return lerArquivo(f).then(function(rs){
+    rs.forEach(function(r){
+      r.itens.forEach(identificar);
+      var dup=listaOC().find(function(o){return String(o.numero).trim()===String(r.meta.numero).trim()&&r.meta.numero;});
+      r.dup=!!dup; if(dup) r.incluir=false;
+      S.ocs.push(r);
+    });
+  }).catch(function(e){ erros.push(f.name+': '+(e&&e.message||e)); }); }); });
+  p.then(function(){
+    S.lendo=false;
+    st.innerHTML=erros.length?'<div class="alert alert-warn">'+erros.map(esc).join('<br>')+'</div>':'';
+    renderImport();
+  });
+}
+function contaPend(r){ return {semProd:r.itens.filter(function(i){return !i.prod_id;}).length, semPed:r.itens.filter(function(i){return i.prod_id&&!i.pedido_id;}).length}; }
+function totalOC(r){ return r.itens.reduce(function(s,i){return s+(Number(i.valor_total)||0);},0); }
+function renderImport(){
+  var box=$('oci-lista'); if(!box) return;
+  if(!S.ocs.length){ box.innerHTML=''; $('oci-resumo').textContent=''; $('oci-salvar').disabled=true; return; }
+  box.innerHTML=S.ocs.map(function(r,f){
+    var c=contaPend(r);
+    var itens=r.itens.map(function(it,i){
+      var chip=it.prod_id?'<span class="badge badge-green" title="'+esc(it.prod_nome)+'">✅ '+esc(String(it.prod_nome).slice(0,26))+(it.match==='nome'?' <i>(por nome)</i>':'')+'</span>':'<span class="badge badge-yellow">⚠️ sem produto</span>';
+      var ped=it.pedido_id?'<span class="badge badge-blue" title="Pedido de '+fmtQtd(it.qty_pedido)+' un">📑 '+esc(it.pedido_numero)+'</span>':(it.prod_id?'<span class="badge badge-gray">sem pedido</span>':'');
+      var busca=(S.busca&&S.busca.f===f&&S.busca.i===i)?'<tr><td colspan="10" class="oci-busca"><input class="form-input" id="oci-busca-in" placeholder="Buscar produto por nome ou código…" oninput="OCI.buscaProd(this.value)" autofocus><div id="oci-busca-res"></div></td></tr>':'';
+      return '<tr><td>'+it.seq+'</td>'+
+        '<td><input class="oci-in" style="width:90px" value="'+esc(it.codigo)+'" onchange="OCI.edit('+f+','+i+',\'codigo\',this.value,true)"></td>'+
+        '<td><input class="oci-in" style="min-width:230px" value="'+esc(it.descricao)+'" onchange="OCI.edit('+f+','+i+',\'descricao\',this.value,true)"></td>'+
+        '<td><input class="oci-in" style="width:64px;text-align:right" value="'+fmtQtd(it.quantidade)+'" onchange="OCI.edit('+f+','+i+',\'quantidade\',this.value)"></td>'+
+        '<td><input class="oci-in" style="width:46px" value="'+esc(it.unidade)+'" onchange="OCI.edit('+f+','+i+',\'unidade\',this.value)"></td>'+
+        '<td><input class="oci-in" style="width:78px;text-align:right" value="'+(it.valor_unit?String(it.valor_unit).replace('.',','):'')+'" onchange="OCI.edit('+f+','+i+',\'valor_unit\',this.value)"></td>'+
+        '<td style="text-align:right;white-space:nowrap">'+brl(it.valor_total)+'</td>'+
+        '<td>'+chip+' <button class="btn btn-sm btn-secondary" style="padding:1px 6px;font-size:.7rem" onclick="OCI.abreBusca('+f+','+i+')">🔗</button></td>'+
+        '<td>'+ped+'</td>'+
+        '<td><button class="btn btn-sm btn-danger" style="padding:1px 7px" onclick="OCI.del('+f+','+i+')">✕</button></td></tr>'+busca;
+    }).join('');
+    return '<div class="oci-card'+(r.incluir?'':' off')+'">'+
+      '<div class="oci-head">'+
+        (r.dup?'<span class="badge badge-red">⚠️ OC já importada — não será salva</span>':'<label style="display:flex;align-items:center;gap:6px;font-size:.8rem"><input type="checkbox" '+(r.incluir?'checked':'')+' onchange="OCI.incluir('+f+',this.checked)"> Importar</label>')+
+        '<span class="badge badge-gray">'+({pdf:'📄 PDF',excel:'📊 Excel',csv:'📑 CSV'}[r.formato]||r.formato)+' • '+esc(r.arquivo)+'</span></div>'+
+      '<div class="oci-meta">'+
+        '<div><label>Nº da OC</label><input class="form-input" value="'+esc(r.meta.numero)+'" onchange="OCI.meta('+f+',\'numero\',this.value)"></div>'+
+        '<div style="flex:2"><label>Fornecedor</label><input class="form-input" value="'+esc(r.meta.fornecedor)+'" onchange="OCI.meta('+f+',\'fornecedor\',this.value)"></div>'+
+        '<div><label>Data</label><input type="date" class="form-input" value="'+esc(r.meta.data)+'" onchange="OCI.meta('+f+',\'data\',this.value)"></div>'+
+        '<div><label>Prev. entrega</label><input type="date" class="form-input" value="'+esc(r.meta.entrega)+'" onchange="OCI.meta('+f+',\'entrega\',this.value)"></div>'+
+        '<div><label>Cond. pagamento</label><input class="form-input" value="'+esc(r.meta.cond)+'" onchange="OCI.meta('+f+',\'cond\',this.value)"></div>'+
+      '</div>'+
+      r.aviso.map(function(a){return '<div class="alert alert-warn" style="margin:8px 0">'+esc(a)+'</div>';}).join('')+
+      '<div style="overflow-x:auto"><table class="oci-tab"><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd</th><th>Un</th><th>V. unit.</th><th>Total</th><th>Produto (por código)</th><th>Pedido</th><th></th></tr></thead><tbody>'+
+        (itens||'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:14px">Nenhum item identificado.</td></tr>')+'</tbody></table></div>'+
+      '<div class="oci-foot"><button class="btn btn-sm btn-secondary" onclick="OCI.add('+f+')">+ Item</button>'+
+        '<span style="font-size:.78rem;color:var(--text2)">'+r.itens.length+' itens'+(c.semProd?' • <b style="color:var(--yellow)">'+c.semProd+' sem produto</b>':'')+(c.semPed?' • '+c.semPed+' sem pedido':'')+'</span>'+
+        '<span style="margin-left:auto;font-weight:700;color:var(--accent)">Total '+brl(totalOC(r))+'</span></div>'+
+      '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.74rem;color:var(--text3)">Ver texto lido do arquivo</summary><pre class="oci-raw">'+esc(r.texto)+'</pre></details>'+
+    '</div>';
+  }).join('');
+  atualizaResumo();
+}
+function atualizaResumo(){
+  var sel=S.ocs.filter(function(r){return r.incluir&&!r.dup&&r.itens.length;});
+  var n=sel.reduce(function(s,r){return s+r.itens.length;},0);
+  $('oci-resumo').textContent=sel.length?(sel.length+' OC(s) • '+n+' itens'):'';
+  var b=$('oci-salvar'); b.disabled=!sel.length; b.textContent=sel.length?('Salvar '+sel.length+' OC(s) como pendente'+(sel.length>1?'s':'')):'Salvar como pendente';
+}
+function edit(f,i,campo,val,rematch){
+  var it=S.ocs[f].itens[i];
+  if(campo==='quantidade'||campo==='valor_unit') it[campo]=num(val); else it[campo]=val;
+  it.valor_total=(Number(it.quantidade)||0)*(Number(it.valor_unit)||0);
+  if(rematch&&!it.manual) identificar(it);
+  renderImport();
+}
+function metaEdit(f,k,v){ S.ocs[f].meta[k]=v; if(k==='numero'){ var d=listaOC().find(function(o){return String(o.numero).trim()===String(v).trim()&&v;}); S.ocs[f].dup=!!d; if(d) S.ocs[f].incluir=false; renderImport(); } }
+function delItem(f,i){ S.ocs[f].itens.splice(i,1); S.ocs[f].itens.forEach(function(x,k){x.seq=k+1;}); renderImport(); }
+function addItem(f){ var r=S.ocs[f]; r.itens.push({seq:r.itens.length+1,codigo:'',descricao:'',unidade:'UN',quantidade:1,valor_unit:0,valor_total:0,prod_id:null,match:null}); renderImport(); }
+function abreBusca(f,i){ S.busca=(S.busca&&S.busca.f===f&&S.busca.i===i)?null:{f:f,i:i}; renderImport(); var el=$('oci-busca-in'); if(el) el.focus(); }
+function buscaProd(q){
+  var res=$('oci-busca-res'); if(!res) return; q=semAcento(q).toLowerCase().trim(); if(q.length<2){res.innerHTML='';return;}
+  var lst=listaProdutos().filter(function(p){return semAcento(p.material).toLowerCase().indexOf(q)>=0||String(p.cod_bionexo).toLowerCase()===q||String(p.cod_hlr).toLowerCase()===q;}).slice(0,8);
+  res.innerHTML=lst.map(function(p){return '<div class="oci-sug" onclick="OCI.escolheProd('+p.id+')"><b>'+esc(p.material)+'</b> <span style="color:var(--text3)">cód '+esc(p.cod_bionexo)+' / '+esc(p.cod_hlr)+'</span></div>';}).join('')||'<div style="padding:6px;color:var(--text3);font-size:.78rem">Nada encontrado.</div>';
+}
+function escolheProd(id){
+  var b=S.busca; if(!b) return; var p=listaProdutos().find(function(x){return x.id==id;}); if(!p) return;
+  var it=S.ocs[b.f].itens[b.i]; it.prod_id=p.id; it.prod_nome=p.material; it.match='manual'; it.manual=true;
+  var pe=acharPedidoItem(p.id); if(pe){it.pedido_id=pe.pedido.id;it.pedido_numero=pe.pedido.numero;it.qty_pedido=pe.item.qty_pedido;} else {it.pedido_id=null;it.pedido_numero='';}
+  S.busca=null; renderImport();
+}
+function salvar(){
+  var sel=S.ocs.filter(function(r){return r.incluir&&!r.dup&&r.itens.length;});
+  var erros=[]; sel.forEach(function(r){ if(!String(r.meta.numero).trim()) erros.push('Informe o nº da OC de "'+r.arquivo+'".'); if(r.itens.some(function(i){return !(i.quantidade>0);})) erros.push('OC '+r.meta.numero+': há item sem quantidade.'); });
+  if(erros.length){ alert(erros.join('\n')); return; }
+  var usuario=''; try{ usuario=(window.currentUser&&(currentUser.name||currentUser.nome))||''; }catch(e){}
+  var agora=Date.now(), salvas=0;
+  sel.forEach(function(r,k){
+    var itens=r.itens.map(function(i,n){ return {seq:n+1,codigo:i.codigo,descricao:i.descricao,unidade:i.unidade,quantidade:Number(i.quantidade)||0,valor_unit:Number(i.valor_unit)||0,valor_total:Number(i.valor_total)||0,
+      prod_id:i.prod_id||null,prod_nome:i.prod_nome||'',match:i.match||null,pedido_id:i.pedido_id||null,pedido_numero:i.pedido_numero||'',qty_faturada:0,qty_entregue:0,status:'pendente',nfs:[]}; });
+    var sub=itens.reduce(function(s,i){return s+i.valor_total;},0);
+    var oc={id:'oc_'+agora+'_'+k,numero:String(r.meta.numero).trim(),fornecedor:r.meta.fornecedor,forn_cnpj:r.meta.cnpj,data:r.meta.data||new Date().toISOString().slice(0,10),prev_entrega:r.meta.entrega,cond_pgto:r.meta.cond,
+      itens:itens,subtotal:sub,total:sub,status:'pendente',origem:'import',formato:r.formato,arquivo:r.arquivo,obs:'Importada de '+r.arquivo,criado_por:usuario,criado_em:new Date().toISOString()};
+    salvarOCImport(oc); salvas++;
+  });
+  fechar(); try{ renderOCPage(); }catch(e){}
+  try{ toast('✅ '+salvas+' OC(s) importada(s) como pendente(s).','success'); }catch(e){}
+}
+
+/* ───────────────────────── cards da lista de OCs ───────────────────────── */
+function resumoHTML(oc){
+  var its=oc.itens||[]; if(!its.length) return '';
+  var ativos=its.filter(function(i){return i.status!=='cancelado';}), fat=ativos.filter(function(i){return i.status==='faturado'||i.status==='entregue';}).length;
+  var pend=ativos.filter(function(i){return pendente(i)>0;}).length, semPed=ativos.filter(function(i){return i.prod_id&&!i.pedido_id;}).length, semProd=ativos.filter(function(i){return !i.prod_id;}).length;
+  var pct=ativos.length?Math.round(fat/ativos.length*100):0;
+  return '<div class="oci-prog"><div class="mini-bar-track" style="flex:1"><div class="mini-bar-fill" style="width:'+pct+'%"></div></div>'+
+    '<span>🧾 '+fat+'/'+ativos.length+' itens faturados</span>'+(pend?'<span class="badge badge-yellow">⏳ '+pend+' pendente(s)</span>':'<span class="badge badge-green">✓ sem pendências</span>')+
+    (semProd?'<span class="badge badge-gray">'+semProd+' sem produto</span>':'')+(semPed?'<span class="badge badge-gray">'+semPed+' sem pedido</span>':'')+'</div>';
+}
+function botoesHTML(oc){
+  return '<button class="btn btn-sm btn-primary" onclick="OCI.detalhe(\''+oc.id+'\')">📋 Itens / Pendências</button>'+
+         '<button class="btn btn-sm btn-secondary" onclick="navTo(\'nf\',document.querySelector(\'.nav-item[onclick*=&quot;\\\'nf\\\'&quot;]\'))">🧾 Receber NF</button>';
+}
+
+/* ───────────────────────── detalhe / pendências ───────────────────────── */
+function garanteDetalhe(){
+  if($('modal-oc-det')) return;
+  var d=document.createElement('div'); d.className='modal-overlay'; d.id='modal-oc-det';
+  d.innerHTML='<div class="modal" style="max-width:1050px;width:96vw"><div class="modal-header"><h3 id="ocd-titulo">OC</h3><button class="modal-close" onclick="OCI.fechaDet()">✕</button></div><div class="modal-body" id="ocd-corpo"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="OCI.fechaDet()">Fechar</button></div></div>';
+  document.body.appendChild(d);
+}
+var _detId=null;
+function detalhe(id){
+  garanteDetalhe(); _detId=id; var oc=listaOC().find(function(o){return String(o.id)===String(id);}); if(!oc) return;
+  var its=oc.itens||[];
+  var pend=its.filter(function(i){return pendente(i)>0;});
+  var corpo='<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;margin-bottom:12px">'+
+    '<span><b>'+esc(oc.fornecedor||'—')+'</b></span><span>📅 '+esc(fmtData(oc.data))+'</span><span>'+brl(oc.total||0)+'</span><span>'+its.length+' itens</span>'+
+    (pend.length?'<span class="badge badge-yellow">⏳ '+pend.length+' item(ns) com saldo pendente</span>':'<span class="badge badge-green">✓ Sem pendências</span>')+'</div>'+
+    '<div style="overflow-x:auto"><table class="oci-tab"><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th style="text-align:right">OC</th><th style="text-align:right">Faturado</th><th style="text-align:right">Pendente</th><th style="text-align:right">Entregue</th><th>NFs</th><th>Pedido</th><th>Status</th><th></th></tr></thead><tbody>'+
+    its.map(function(i,k){
+      var p=pendente(i), st=statusItem(i);
+      var lab={pendente:'<span class="badge badge-yellow">⏳ Pendente</span>',parcial:'<span class="badge badge-blue">🔵 Parcial</span>',faturado:'<span class="badge badge-green">🧾 Faturado</span>',entregue:'<span class="badge badge-green">✅ Entregue</span>',cancelado:'<span class="badge badge-gray">🚫 Encerrado</span>'}[st]||st;
+      var nfs=(i.nfs||[]).map(function(n){return '<span class="badge badge-gray" title="'+esc(n.data||'')+'">NF '+esc(n.numero)+': '+fmtQtd(n.qty)+(n.entregue?' ✅':'')+'</span>';}).join(' ');
+      return '<tr><td>'+(i.seq||k+1)+'</td><td>'+esc(i.codigo)+'</td><td>'+esc(i.descricao)+(i.prod_id?'':' <span class="badge badge-gray">sem produto</span>')+'</td>'+
+        '<td style="text-align:right">'+fmtQtd(i.quantidade)+' '+esc(i.unidade||'')+'</td><td style="text-align:right">'+fmtQtd(i.qty_faturada||0)+'</td>'+
+        '<td style="text-align:right;font-weight:700;color:'+(p>0?'var(--yellow)':'var(--green)')+'">'+fmtQtd(p)+'</td><td style="text-align:right">'+fmtQtd(i.qty_entregue||0)+'</td>'+
+        '<td>'+(nfs||'—')+'</td><td>'+(i.pedido_numero?esc(i.pedido_numero):'—')+'</td><td>'+lab+'</td>'+
+        '<td>'+(p>0&&!i.saldo_encerrado?'<button class="btn btn-sm btn-secondary" style="font-size:.68rem;padding:2px 6px" title="O fornecedor não vai entregar o saldo" onclick="OCI.encerra(\''+oc.id+'\','+k+')">Encerrar saldo</button>':'')+'</td></tr>';
+    }).join('')+'</tbody></table></div>';
+  $('ocd-titulo').textContent='📋 OC '+oc.numero+' — itens e pendências';
+  $('ocd-corpo').innerHTML=corpo; $('modal-oc-det').classList.add('open');
+}
+function encerra(id,k){
+  var oc=listaOC().find(function(o){return String(o.id)===String(id);}); if(!oc) return; var i=oc.itens[k]; if(!i) return;
+  if(!confirm('Encerrar o saldo pendente de "'+i.descricao+'"?\nO item deixa de ser cobrado nesta OC.')) return;
+  i.saldo_encerrado=true; recalcOC(oc); salvarOCImport(oc); detalhe(id); try{renderOCPage();}catch(e){}
+}
+
+/* ───────────────────────── NF (XML): vínculo item da nota ↔ item da OC ───────────────────────── */
+function ocsSelecionadasNF(){
+  var ids=[]; try{ ids=(window._nfOcSelecionadas&&_nfOcSelecionadas.nf)||(typeof _nfOcSelecionadas!=='undefined'&&_nfOcSelecionadas.nf)||[]; }catch(e){}
+  return ids.map(function(x){var id=(x&&typeof x==='object')?x.id:x; return listaOC().find(function(o){return String(o.id)===String(id);});}).filter(ehImportada);
+}
+function opcoesOC(ocs){
+  var arr=[]; ocs.forEach(function(oc){ (oc.itens||[]).forEach(function(oi){ arr.push({oc:oc,oi:oi,val:oc.id+'|'+oi.seq}); }); }); return arr;
+}
+function sugestao(it,ocs){
+  var melhor=null,bs=0, prod=it.matched&&it.matched[0];
+  opcoesOC(ocs).forEach(function(o){
+    if(pendente(o.oi)<=0) return; var s=0;
+    if(prod&&o.oi.prod_id&&String(o.oi.prod_id)===String(prod.id)) s=100;
+    else if(typeof matchScore==='function'){ var m=matchScore(String(it.descricao||'').toLowerCase(),String(o.oi.descricao||'').toLowerCase()); if(m>=0.55) s=m*80; }
+    if(s>bs){bs=s;melhor=o;}
+  });
+  return melhor;
+}
+function qtdNF(it){ try{ return calcQtdUn(it); }catch(e){ return Number(it.quantidade)||0; } }
+function injetaLinks(){
+  var wrap=$('nf-itens-wrap'); if(!wrap) return;
+  var velho=wrap.querySelector('.oci-nf-banner'); if(velho) velho.remove();
+  Array.prototype.forEach.call(wrap.querySelectorAll('.oci-nf-row'),function(e){e.remove();});
+  var ocs=ocsSelecionadasNF(); if(!ocs.length||typeof nfItens==='undefined'||!nfItens.length) return;
+  var opts=opcoesOC(ocs);
+  // limpa vínculos de OCs removidas
+  nfItens.forEach(function(it){ if(it.oc_link&&!ocs.some(function(o){return String(o.id)===String(it.oc_link.oc_id);})) it.oc_link=null; });
+  var filhos=Array.prototype.filter.call(wrap.children,function(c){return c.tagName==='DIV';});
+  var vinc=nfItens.filter(function(i){return i.oc_link;}).length, sug=0;
+  filhos.forEach(function(div,i){
+    var it=nfItens[i]; if(!it) return;
+    var row=document.createElement('div'); row.className='oci-nf-row';
+    var atual=it.oc_link?it.oc_link.oc_id+'|'+it.oc_link.seq:'';
+    var sel='<select class="form-input oci-sel" onchange="OCI.nfSet('+i+',this.value)"><option value="">— vincular a um item da OC —</option>'+
+      opts.map(function(o){var p=pendente(o.oi); return '<option value="'+esc(o.val)+'"'+(o.val===atual?' selected':'')+'>OC '+esc(o.oc.numero)+' • #'+o.oi.seq+' '+esc(String(o.oi.descricao).slice(0,42))+' (pend. '+fmtQtd(p)+')</option>';}).join('')+'</select>';
+    var info='';
+    if(it.oc_link){
+      var oi=(ocs.find(function(o){return String(o.id)===String(it.oc_link.oc_id);})||{itens:[]}).itens.find(function(x){return String(x.seq)===String(it.oc_link.seq);});
+      if(oi){ var q=qtdNF(it), p=pendente(oi), rest=p-q;
+        info='<span class="oci-ok">✔ vinculado</span> <span style="font-size:.72rem;color:var(--text2)">NF '+fmtQtd(q)+' un • pendente na OC '+fmtQtd(p)+' → '+(rest>0?'<b style="color:var(--yellow)">restará '+fmtQtd(rest)+'</b>':(rest<0?'<b style="color:var(--red)">excesso '+fmtQtd(-rest)+'</b>':'<b style="color:var(--green)">quita o item</b>'))+'</span>'; }
+    } else {
+      var s=sugestao(it,ocs);
+      if(s){ sug++; info='<button class="btn btn-sm btn-blue" style="font-size:.7rem;padding:2px 8px" onclick="OCI.nfSet('+i+',\''+esc(s.val)+'\')">💡 Sugerido: #'+s.oi.seq+' '+esc(String(s.oi.descricao).slice(0,30))+' — aceitar</button>'; }
+      else info='<span style="font-size:.72rem;color:var(--text3)">sem sugestão — escolha o item da OC</span>';
+    }
+    row.innerHTML='<span class="oci-lbl">🗂️ Item da OC</span>'+sel+'<div>'+info+'</div>';
+    div.appendChild(row);
+  });
+  var b=document.createElement('div'); b.className='oci-nf-banner';
+  b.innerHTML='<b>🗂️ Vínculo com a OC '+ocs.map(function(o){return esc(o.numero);}).join(', ')+'</b> &nbsp; '+vinc+' de '+nfItens.length+' itens da nota vinculados'+
+    (sug?' &nbsp; <button class="btn btn-sm btn-primary" style="font-size:.72rem" onclick="OCI.nfAceitarTodos()">💡 Aceitar '+sug+' sugestão(ões)</button>':'');
+  wrap.insertBefore(b,wrap.firstChild);
+}
+function nfSet(i,val){
+  var it=nfItens[i]; if(!it) return;
+  if(!val){ it.oc_link=null; }
+  else {
+    var p=val.split('|'), oc=listaOC().find(function(o){return String(o.id)===p[0];}); if(!oc) return;
+    var oi=oc.itens.find(function(x){return String(x.seq)===p[1];}); if(!oi) return;
+    it.oc_link={oc_id:oc.id,seq:oi.seq};
+    if(oi.prod_id){ var pr=listaProdutos().find(function(x){return String(x.id)===String(oi.prod_id);}); if(pr&&(!it.matched||!it.matched.length||String(it.matched[0].id)!==String(pr.id))) it.matched=[pr]; }
+  }
+  renderNFItens();
+}
+function nfAceitarTodos(){
+  var ocs=ocsSelecionadasNF(); var usados={};
+  nfItens.forEach(function(it,i){ if(it.oc_link) return; var s=sugestao(it,ocs); if(s){ it.oc_link={oc_id:s.oc.id,seq:s.oi.seq}; var pr=s.oi.prod_id&&listaProdutos().find(function(x){return String(x.id)===String(s.oi.prod_id);}); if(pr) it.matched=[pr]; } });
+  renderNFItens();
+}
+/* aplica a NF aos itens da OC importada (chamado no registro da NF) */
+var _resumoPend=new Set();
+function aplicarNF(oc,itensNF){
+  var nf=(typeof nfXMLData!=='undefined'&&nfXMLData)||{}, alterou=false;
+  itensNF.forEach(function(it){
+    var l=it.oc_link; if(!l||String(l.oc_id)!==String(oc.id)) return;
+    var oi=oc.itens.find(function(x){return String(x.seq)===String(l.seq);}); if(!oi) return;
+    var q=qtdNF(it); if(!(q>0)) return;
+    oi.qty_faturada=(Number(oi.qty_faturada)||0)+q;
+    (oi.nfs=oi.nfs||[]).push({numero:String(nf.numero||''),data:nf.data||'',qty:q,entregue:false});
+    oi.status=statusItem(oi); alterou=true;
+    atualizaPedido(oi,q);
+  });
+  if(alterou){ recalcOC(oc); salvarOCImport(oc); _resumoPend.add(String(oc.id)); }
+}
+function atualizaPedido(oi,q){
+  if(!oi.pedido_id) return;
+  var o=listaPedidos().find(function(x){return String(x.id)===String(oi.pedido_id);}); if(!o) return;
+  var pi=(o.itens||[]).find(function(x){return String(x.prod_id)===String(oi.prod_id);}); if(!pi) return;
+  pi.qty_faturada=(pi.qty_faturada||0)+q;
+  if(pi.qty_faturada>=(pi.qty_pedido||0)) pi.status='faturado';
+  try{ o.status=calcOrderStatus(o); }catch(e){}
+  if(o.status==='aberto'&&(o.itens||[]).some(function(x){return (x.qty_faturada||0)>0;})) o.status='parcial';
+  try{ localStorage.setItem('fg_orders_backup',JSON.stringify(listaPedidos())); }catch(e){}
+  try{ _saveOrderDirect(o); }catch(e){}
+  try{ updateOrdersBadge(); }catch(e){}
+}
+function aplicarEntrega(nfEntry){
+  var alterou=false;
+  listaOC().filter(ehImportada).forEach(function(oc){
+    var mudou=false;
+    (oc.itens||[]).forEach(function(oi){ (oi.nfs||[]).forEach(function(n){ if(!n.entregue&&String(n.numero)===String(nfEntry.numero)){ n.entregue=true; oi.qty_entregue=(Number(oi.qty_entregue)||0)+(Number(n.qty)||0); mudou=true; } }); oi.status=statusItem(oi); });
+    if(mudou){ recalcOC(oc); salvarOCImport(oc); alterou=true; }
+  });
+  if(alterou){ try{ renderOCPage(); }catch(e){} }
+}
+function mostraPendencias(){
+  var ids=Array.from(_resumoPend); _resumoPend.clear(); if(!ids.length) return;
+  var blocos=[], total=0;
+  ids.forEach(function(id){
+    var oc=listaOC().find(function(o){return String(o.id)===String(id);}); if(!oc) return;
+    var pend=(oc.itens||[]).filter(function(i){return pendente(i)>0;}); total+=pend.length;
+    blocos.push('<div style="margin-bottom:14px"><b>OC '+esc(oc.numero)+'</b> — '+esc(oc.fornecedor||'')+' &nbsp; '+
+      (pend.length?'<span class="badge badge-yellow">⏳ '+pend.length+' item(ns) ainda não faturado(s)</span>':'<span class="badge badge-green">✓ totalmente faturada</span>')+
+      (pend.length?'<table class="oci-tab" style="margin-top:6px"><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th style="text-align:right">Pedido na OC</th><th style="text-align:right">Faturado</th><th style="text-align:right">Pendente</th></tr></thead><tbody>'+
+        pend.map(function(i){return '<tr><td>'+i.seq+'</td><td>'+esc(i.codigo)+'</td><td>'+esc(i.descricao)+'</td><td style="text-align:right">'+fmtQtd(i.quantidade)+'</td><td style="text-align:right">'+fmtQtd(i.qty_faturada||0)+'</td><td style="text-align:right;font-weight:700;color:var(--yellow)">'+fmtQtd(pendente(i))+'</td></tr>';}).join('')+'</tbody></table>':'')+'</div>');
+  });
+  garanteDetalhe(); $('ocd-titulo').textContent=total?'⚠️ Itens da OC que ainda não faturaram':'✅ OC totalmente faturada';
+  $('ocd-corpo').innerHTML=(total?'<div class="alert alert-warn" style="margin-bottom:12px">Estes itens estavam na OC e não vieram nas NFs registradas. Continuam <b>pendentes</b> até uma próxima NF ou até você encerrar o saldo.</div>':'')+blocos.join('');
+  $('modal-oc-det').classList.add('open');
+}
+
+/* ───────────────────────── ganchos nas funções existentes ───────────────────────── */
+var _origLink=window.linkNFToSpecificOC;
+window.linkNFToSpecificOC=function(nfItensArr,ocId){
+  var oc=listaOC().find(function(o){return String(o.id)===String(ocId);});
+  if(ehImportada(oc)){ aplicarNF(oc,nfItensArr||[]); return; }
+  return _origLink?_origLink.apply(this,arguments):undefined;
+};
+var _origRender=window.renderNFItens;
+window.renderNFItens=function(){ var r=_origRender.apply(this,arguments); try{injetaLinks();}catch(e){console.warn('OC link',e);} return r; };
+if(typeof window._renderOCTags==='function'){
+  var _origTags=window._renderOCTags;
+  window._renderOCTags=function(p){ var r=_origTags.apply(this,arguments); try{ if(p==='nf'&&typeof nfItens!=='undefined'&&nfItens.length) renderNFItens(); }catch(e){} return r; };
+}
+var _origReg=window.registrarNF;
+if(typeof _origReg==='function'){
+  window.registrarNF=function(){
+    var ocs=ocsSelecionadasNF();
+    if(ocs.length&&typeof nfItens!=='undefined'){
+      var sem=nfItens.filter(function(i){return !i.oc_link;}).length;
+      if(sem&&!confirm('⚠️ '+sem+' item(ns) da NF não foram vinculados a nenhum item da OC.\nEles serão registrados no estoque normalmente, mas não baixarão a pendência da OC.\n\nContinuar?')) return;
+    }
+    var r=_origReg.apply(this,arguments);
+    setTimeout(mostraPendencias,500);
+    return r;
+  };
+}
+var _origDel=window.linkDeliveryToOrders;
+if(typeof _origDel==='function'){
+  window.linkDeliveryToOrders=function(nfEntry){ var r=_origDel.apply(this,arguments); try{aplicarEntrega(nfEntry);}catch(e){console.warn(e);} return r; };
+}
+
+window.abrirImportOC=abrir;
+window.ocPdfResumoHTML=resumoHTML; window.ocResumoHTML=resumoHTML; window.ocBotoesHTML=botoesHTML;
+window.OCI={abrir:abrir,fechar:fechar,arquivos:arquivos,incluir:function(f,v){S.ocs[f].incluir=v;renderImport();},edit:edit,meta:metaEdit,del:delItem,add:addItem,abreBusca:abreBusca,buscaProd:buscaProd,escolheProd:escolheProd,salvar:salvar,
+  detalhe:detalhe,fechaDet:function(){$('modal-oc-det').classList.remove('open');},encerra:encerra,nfSet:nfSet,nfAceitarTodos:nfAceitarTodos,
+  /* expostos para teste */ _t:{num:num,isoData:isoData,montarRascunhos:montarRascunhos,parseCSV:parseCSV,lerGrade:lerGrade,papelDe:papelDe,normCod:normCod,statusItem:statusItem,recalcOC:recalcOC,identificar:identificar,pendente:pendente,aplicarNF:aplicarNF,aplicarEntrega:aplicarEntrega,lerArquivo:lerArquivo,S:S}};
+})();
+
 </script>
 <script>
 /* ═══ FarmaGest • Tema Aurora: login, cabeçalho e fundo animado ═══ */
