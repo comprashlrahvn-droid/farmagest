@@ -401,6 +401,32 @@ tbody tr:hover{background:rgba(46,204,113,.07);}
 
 .oci-det{margin-top:6px;}
 .oci-sum{cursor:pointer;font-size:.8rem;font-weight:700;color:var(--accent);padding:6px 0;}
+
+/* ═══ Solicitações de padronização / perfil solicitante ═══ */
+body.vn-solicitante #sidebar .nav-item:not(.nav-padron),
+body.vn-solicitante #sidebar .nav-section:not(.nav-sec-padron){display:none!important;}
+.pd-tipos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.pd-tipo{border:2px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:2px;transition:all .15s;}
+.pd-tipo .ic{font-size:1.5rem;}
+.pd-tipo span{font-size:.74rem;color:var(--text3);}
+.pd-tipo:hover{border-color:#9fd0b5;}
+.pd-tipo.on.pad{border-color:#1fa862;background:rgba(31,168,98,.08);box-shadow:0 0 0 3px rgba(31,168,98,.12);}
+.pd-tipo.on.desq{border-color:#d64541;background:rgba(214,69,65,.07);box-shadow:0 0 0 3px rgba(214,69,65,.10);}
+.pd-sec{font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.pd-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.pd-f{margin-bottom:10px;position:relative;}
+.pd-f label{display:block;font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;}
+.pd-f .form-input{width:100%;box-sizing:border-box;}
+.pd-sugs{position:absolute;left:0;right:0;top:100%;z-index:5;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(10,60,38,.15);max-height:230px;overflow:auto;}
+.pd-chip{background:rgba(31,168,98,.1);border:1px solid rgba(31,168,98,.3);border-radius:10px;padding:6px 12px;font-size:.78rem;margin-bottom:10px;color:#127a42;}
+.pd-chip a{margin-left:10px;color:var(--red);cursor:pointer;text-decoration:underline;font-size:.72rem;}
+.pd-fotos{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;}
+.pd-foto{position:relative;width:104px;height:104px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:#f2f8f4;display:flex;align-items:center;justify-content:center;}
+.pd-foto img{width:100%;height:100%;object-fit:cover;}
+.pd-foto button{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:.7rem;}
+.pd-msgbox{background:#f2f8f4;border-left:4px solid #1fa862;border-radius:0 10px 10px 0;padding:12px 16px;margin-top:14px;font-size:.88rem;}
+.pd-hist{padding:8px 0;border-bottom:1px solid rgba(20,120,70,.08);}
+@media (max-width:640px){.pd-grid,.pd-tipos{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -441,7 +467,8 @@ tbody tr:hover{background:rgba(46,204,113,.07);}
       <div class="vl-field"><svg class="vl-ico" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><input class="linput" type="text" id="regName" placeholder="Nome completo"></div>
       <div class="vl-field"><svg class="vl-ico" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><input class="linput" type="email" id="regEmail" placeholder="seu@email.com"></div>
       <div class="vl-field lpwrap"><svg class="vl-ico" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><input class="linput" type="password" id="regPassword" placeholder="Mínimo 6 caracteres"><button type="button" class="ltpw" onclick="togglePw('regPassword',this)">👁</button></div>
-      <div class="vl-field"><select class="lselect" id="regRole"><option value="user">Usuário</option><option value="admin">Administrador</option></select></div>
+      <div class="vl-field"><select class="lselect" id="regRole" onchange="vlRoleChange()"><option value="solicitante">Solicitante de setor (padronização)</option><option value="user">Usuário (Compras / Farmácia)</option><option value="admin">Administrador</option></select></div>
+      <div class="vl-field" id="regSetorWrap"><svg class="vl-ico" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><input class="linput" type="text" id="regSetor" placeholder="Seu setor (ex.: UTI, Centro Cirúrgico)"></div>
       <p class="vl-warn">⚠️ Acesso pendente até aprovação do administrador.</p>
       <button class="lbtn" onclick="doRegister()">Solicitar Cadastro</button>
       <div class="lerror" id="registerError"></div>
@@ -1405,6 +1432,257 @@ tbody tr:hover{background:rgba(46,204,113,.07);}
 </div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+/* ═══════════════════════════════════════════════════════════════════════
+   FARMAGEST • AUTENTICAÇÃO NO SERVIDOR (v6)
+   - Login/cadastro/sessão validados no Google Apps Script (senha nunca fica no navegador)
+   - Toda chamada ao banco leva o token da sessão; sem sessão, nada é lido nem gravado
+   - Sessão expirada/revogada → volta para a tela de login
+   Este script roda ANTES do script principal; as funções antigas (doLogin etc.)
+   viram "ponte" para window.vnAuth.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+var SKEY='fgSess', MASTER='golfettojunior1@gmail.com';
+var PUB={test:1,confirmOCReceipt:1,markOCRead:1,login:1,register:1};
+var SOL_OK={me:1,logout:1,updateProfile:1,registrarPadronizacao:1,test:1};
+var sess=null, expirando=false, listaCache=[];
+// leitura em lote (login/me já trazem os dados): serve as leituras forçadas por alguns segundos
+var LOTE=['products','nf_history','movimentos','entregas','orders','val_alerts','config_vinculos','oc_list','padronizacoes'];
+var PRE={}, PRE_TTL=10000, preOkAt=0;
+function guardaLote(data){ if(!data) return false; var t=Date.now(); PRE={}; Object.keys(data).forEach(function(k){ if(Array.isArray(data[k])) PRE[k]={rows:data[k],ts:t}; }); preOkAt=t; return true; }
+function pre(sheet){ var p=PRE[sheet]; return (p&&Date.now()-p.ts<PRE_TTL)?p.rows:null; }
+
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function gsUrl(){ try{ return GS_API; }catch(e){ return null; } }
+function b64(s){ return btoa(unescape(encodeURIComponent(s))); }
+function lerSess(){ try{ var s=localStorage.getItem(SKEY)||sessionStorage.getItem(SKEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function gravaSess(lembrar){ try{ localStorage.removeItem(SKEY); sessionStorage.removeItem(SKEY); (lembrar?localStorage:sessionStorage).setItem(SKEY,JSON.stringify(sess)); sess.lembrar=!!lembrar; }catch(e){} }
+function regravaSess(){ if(!sess) return; try{ var st=sess.lembrar?localStorage:sessionStorage; st.setItem(SKEY,JSON.stringify(sess)); }catch(e){} }
+function limpaSess(){ sess=null; try{ localStorage.removeItem(SKEY); sessionStorage.removeItem(SKEY); }catch(e){} }
+sess=lerSess();
+if(sess&&localStorage.getItem(SKEY)) sess.lembrar=true;
+try{ localStorage.removeItem('fgUser'); }catch(e){}          // chave antiga (guardava a senha em texto)
+
+function fake(obj){ return new Response(JSON.stringify(obj),{status:200,headers:{'Content-Type':'application/json'}}); }
+function toastSeguro(m,t){ try{ toast(m,t||'success'); }catch(e){} }
+
+/* ───────── fetch: anexa o token, bloqueia chamadas sem sessão e detecta sessão vencida ───────── */
+var _fetch=window.fetch.bind(window);
+function ehSol(){ return !!(sess&&sess.user&&sess.user.role==='solicitante'); }
+window.fetch=function(input,init){
+  var url=(typeof input==='string')?input:((input&&input.url)||''), base=gsUrl();
+  if(!base||url.indexOf(base)!==0) return _fetch(input,init);
+  init=init||{};
+  var isPost=String(init.method||'GET').toUpperCase()==='POST', action='', sheet='', body=null, m;
+  if(isPost){ try{ body=JSON.parse(init.body); action=body.action||''; sheet=body.sheet||''; }catch(e){} }
+  else { m=url.match(/[?&]action=([^&]*)/); action=m?decodeURIComponent(m[1]):''; m=url.match(/[?&]sheet=([^&]*)/); sheet=m?decodeURIComponent(m[1]):''; }
+  if(action==='insert'||action==='update'||action==='delete'||action==='clearSheet'){ if(sheet) delete PRE[sheet]; }   // escrita invalida o lote dessa aba
+  if(action==='test'&&Date.now()-preOkAt<15000) return Promise.resolve(fake({status:'ok',message:'GAS Vila Nova conectado!'}));
+  if(!PUB[action]){
+    if(!sess||!sess.token) return Promise.resolve(fake({error:'auth',message:'Sem sessão ativa.'}));
+    if(ehSol()&&!SOL_OK[action]){
+      if(action==='getAll'&&sheet!=='padronizacoes') return Promise.resolve(fake([]));
+      if(action!=='getAll') return Promise.resolve(fake({error:'forbidden',message:'Sem permissão.'}));
+    }
+    if(isPost&&body){ body.token=sess.token; init=Object.assign({},init,{body:JSON.stringify(body)}); }
+    else if(!isPost){ url=url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(sess.token); }
+  }
+  return _fetch(isPost?input:url,init).then(function(res){ vigia(res); return res; });
+};
+function vigia(res){
+  try{
+    var c=res.clone(); if(!c.body) return; var rd=c.body.getReader();
+    rd.read().then(function(r){
+      try{ var t=new TextDecoder().decode((r.value||new Uint8Array()).slice(0,60)); if(t.indexOf('"error":"auth"')>=0) expirou(); }catch(e){}
+      try{ rd.cancel(); }catch(e){}
+    }).catch(function(){});
+  }catch(e){}
+}
+function telaLogin(msg){
+  try{ $('app').style.display='none'; $('loginPage').style.display='flex'; document.body.classList.remove('vn-solicitante'); }catch(e){}
+  var er=$('loginError'); if(er&&msg){ er.textContent=msg; er.style.display='block'; }
+}
+function expirou(){
+  if(!sess||expirando) return; expirando=true;
+  limpaSess(); try{ currentUser=null; }catch(e){}
+  telaLogin('Sua sessão expirou ou foi encerrada. Entre novamente.');
+  setTimeout(function(){expirando=false;},3000);
+}
+
+/* ───────── chamadas de autenticação (POST; se o POST falhar, tenta GET) ───────── */
+function comTimeout(p,ms){ return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},ms);})]); }
+async function chamar(action,payload,ms){
+  var body=Object.assign({action:action},payload||{});
+  try{
+    var r=await comTimeout(fetch(GS_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),redirect:'follow'}),ms||15000);
+    return await r.json();
+  }catch(e){
+    var u=GS_API+'?action='+encodeURIComponent(action)+'&enc=b64&data='+encodeURIComponent(b64(JSON.stringify(body)));
+    var r2=await comTimeout(fetch(u,{redirect:'follow'}),ms||15000);
+    return await r2.json();
+  }
+}
+function setUsuario(u){ try{ currentUser=u; }catch(e){} }
+// Carga em lote "tudo ou nada". Retorna {ok} ou {ok:false,motivo:'auth'|'rede'|'servidor'}
+function loteFresco(){ return Date.now()-preOkAt<PRE_TTL&&LOTE.every(function(k){return !!PRE[k];}); }
+async function prefetch(){
+  if(!sess||!sess.token) return {ok:false,motivo:'auth'};
+  if(ehSol()) return {ok:true};
+  if(loteFresco()) return {ok:true};            // o login/me acabou de trazer tudo: não pede de novo
+  try{
+    var r=await chamar('getMany',{sheets:LOTE},60000);
+    if(r&&r.ok&&r.data&&guardaLote(r.data)) return {ok:true};
+    if(r&&r.error==='auth') return {ok:false,motivo:'auth'};
+    return {ok:false,motivo:'servidor',erro:r&&(r.error||r.message)};
+  }catch(e){ return {ok:false,motivo:'rede',erro:String(e)}; }
+}
+
+async function carregarDados(user){
+  if(user.role==='solicitante'){ window._gasSaveErrorNotified=true; return; }     // setor não precisa dos dados do estoque
+  try{
+    showLoading('Carregando dados...');
+    await loadMainState();                            // (ponte em auth_pos.js: lê tudo em 1 chamada, ou não altera nada)
+    try{ dedupMovimentos(); }catch(e){}
+  }catch(e){ console.warn('carga de dados:',e); }
+  try{ hideLoading(); }catch(e){}
+}
+async function iniciarSessao(user){
+  setUsuario(user);
+  await carregarDados(user);
+  if(!sess) return;                                   // sessão caiu durante a carga: tela de login já foi mostrada
+  showApp();
+}
+
+async function login(){
+  var email=$('loginEmail').value.trim(), pass=$('loginPassword').value, lembrar=$('rememberMe').checked, er=$('loginError');
+  er.style.display='none';
+  if(!email||!pass){ er.textContent='Preencha e-mail e senha.'; er.style.display='block'; return; }
+  showLoading('Verificando credenciais...');
+  var r;
+  try{ r=await chamar('login',{email:email,password:pass,remember:lembrar,prefetch:LOTE},45000); }
+  catch(e){ hideLoading(); er.textContent='Não foi possível conectar ao servidor. Verifique a internet e tente novamente.'; er.style.display='block'; return; }
+  hideLoading();
+  if(!r||!r.ok){ er.textContent=(r&&r.message)||'E-mail ou senha incorretos.'; er.style.display='block'; return; }
+  sess={token:r.token,exp:r.exp,user:r.user}; gravaSess(lembrar); guardaLote(r.data);
+  $('loginPassword').value='';
+  await iniciarSessao(r.user);
+}
+
+async function checkRemembered(){
+  if(!sess||!sess.token) return false;
+  try{
+    var r=await comTimeout(chamar('me',{prefetch:LOTE},45000),46000);
+    if(r&&r.ok){ sess.user=r.user; regravaSess(); guardaLote(r.data); await iniciarSessao(r.user); return true; }
+    limpaSess(); return false;
+  }catch(e){
+    // sem conexão: abre com os dados locais, mas só para quem já tinha sessão neste computador
+    if(sess.user){ await iniciarSessao(sess.user); return true; }
+    return false;
+  }
+}
+
+async function register(){
+  var name=$('regName').value.trim(), email=$('regEmail').value.trim(), pass=$('regPassword').value, role=$('regRole').value, setor=(($('regSetor')||{}).value||'').trim(), er=$('registerError');
+  er.style.cssText='display:none;';
+  var erro=function(m){ er.style.cssText='display:block;'; er.textContent=m; };
+  if(!name||!email||pass.length<6){ erro('Preencha todos os campos (senha mín. 6 caracteres).'); return; }
+  if(role==='solicitante'&&!setor){ erro('Informe o seu setor.'); return; }
+  showLoading('Registrando...');
+  try{
+    var r=await chamar('register',{name:name,email:email,password:pass,role:role,setor:setor});
+    hideLoading();
+    if(r&&r.ok){ er.style.cssText='display:block;background:rgba(0,212,170,0.1);border-color:rgba(0,212,170,0.3);color:var(--accent);'; er.textContent='✅ '+(r.message||'Cadastro solicitado! Aguarde aprovação do administrador.'); }
+    else erro('❌ '+((r&&(r.message||r.error))||'Não foi possível concluir o cadastro.'));
+  }catch(e){ hideLoading(); erro('❌ Não foi possível conectar ao servidor. Tente novamente.'); }
+}
+
+function logout(){
+  if(sess&&sess.token){ try{ chamar('logout',{},6000).catch(function(){}); }catch(e){} }
+  var tk=sess; setTimeout(function(){ limpaSess(); },50); void tk;
+  setUsuario(null); document.body.classList.remove('vn-solicitante');
+  $('app').style.display='none'; $('loginPage').style.display='flex';
+  $('loginEmail').value=''; $('loginPassword').value='';
+}
+
+/* ───────── gestão de usuários (somente master) ───────── */
+async function listUsers(){
+  try{ var r=await chamar('listUsers',{}); if(r&&r.ok){ listaCache=r.users||[]; return listaCache; } }catch(e){}
+  return listaCache;
+}
+async function setStatus(id,status){ var r=await chamar('setUserStatus',{id:id,status:status}); return r&&r.ok; }
+async function setRole(id,role,setor){ var r=await chamar('setUserRole',{id:id,role:role,setor:setor}); return r&&r.ok; }
+async function apagar(id){ var r=await chamar('deleteUser',{id:id}); return r&&r.ok; }
+async function resetSenha(id,nova){ return chamar('resetPassword',{id:id,newPassword:nova}); }
+async function updateProfile(p){
+  var r=await chamar('updateProfile',p);
+  if(r&&r.ok&&r.user){ if(sess){ sess.user=r.user; regravaSess(); } setUsuario(Object.assign({},currentUser,r.user)); return r; }
+  throw new Error((r&&(r.message||r.error))||'Não foi possível salvar.');
+}
+// compatível com chamadas antigas: _updateUser(id,{status|role|setor|name|password})
+async function updateUser(id,up){
+  up=up||{}; var ok=true;
+  if('status' in up) ok=(await setStatus(id,up.status))&&ok;
+  if('role' in up||'setor' in up){
+    var cur=listaCache.find(function(u){return String(u.id)===String(id);})||{};
+    ok=(await setRole(id,up.role||cur.role||'user',('setor' in up)?up.setor:cur.setor))&&ok;
+  }
+  if(('name' in up||'password' in up)&&currentUser&&String(id)===String(currentUser.id)){ await updateProfile({name:up.name,password:up.password}); }
+  return {status:ok?'ok':'erro'};
+}
+
+async function renderUsuarios(){
+  var tbody=$('usuarios-body'); if(!tbody) return;
+  if(!currentUser||currentUser.email!==MASTER){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:30px">⛔ Acesso restrito ao administrador master.</td></tr>'; return;
+  }
+  var thead=tbody.closest('table')&&tbody.closest('table').querySelector('thead tr');
+  if(thead) thead.innerHTML='<th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Ações</th>';
+  var us=await listUsers();
+  tbody.innerHTML=us.map(function(u){
+    var m=u.email===MASTER, ap=String(u.status).toLowerCase()==='approved';
+    return '<tr><td><b>'+esc(u.name||'—')+'</b>'+(m?'<span class="badge badge-red" style="margin-left:6px">👑 Master</span>':'')+'</td><td class="dim">'+esc(u.email||'—')+'</td>'+
+      '<td>'+(window.vnPerfilCell?window.vnPerfilCell(u,MASTER):esc(u.role))+'</td>'+
+      '<td><span class="badge '+(ap?'badge-green':'badge-yellow')+'">'+(ap?'✅ Aprovado':'⏳ Pendente')+'</span></td>'+
+      '<td style="display:flex;gap:6px;flex-wrap:wrap">'+
+        (!m&&!ap?'<button class="btn btn-sm btn-primary" onclick="aprovarUsuario(\''+esc(u.id)+'\')">✅ Aprovar</button>':'')+
+        (!m&&ap?'<button class="btn btn-sm btn-warning" onclick="revogarUsuario(\''+esc(u.id)+'\')">🔒 Revogar</button>':'')+
+        '<button class="btn btn-sm btn-secondary" onclick="vnAuth.redefinir(\''+esc(u.id)+'\')" title="Definir uma nova senha">🔑 Senha</button>'+
+        (!m?'<button class="btn btn-sm btn-danger" onclick="excluirUsuario(\''+esc(u.id)+'\')">🗑</button>':'<span class="badge badge-gray">Protegido</span>')+
+      '</td></tr>';
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum usuário.</td></tr>';
+}
+async function aprovar(id){ showLoading('Aprovando...'); var ok=await setStatus(id,'approved'); hideLoading(); toastSeguro(ok?'✅ Usuário aprovado! Ele já pode fazer login.':'⚠️ Erro ao aprovar. Tente novamente.',ok?'success':'warning'); renderUsuarios(); }
+async function revogar(id){ showLoading('Revogando...'); await setStatus(id,'pending'); hideLoading(); toastSeguro('🔒 Acesso revogado.','warning'); renderUsuarios(); }
+async function excluir(id){ if(!confirm('Excluir usuário?')) return; showLoading('Excluindo...'); await apagar(id); hideLoading(); toastSeguro('🗑 Usuário excluído.','success'); renderUsuarios(); }
+async function redefinir(id){
+  var u=listaCache.find(function(x){return String(x.id)===String(id);})||{};
+  var nova=prompt('Nova senha temporária para '+(u.name||'o usuário')+' (mín. 6 caracteres).\nEle será desconectado e deve trocá-la em "Meu Perfil".','');
+  if(nova===null) return; if(nova.length<6){ alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+  showLoading('Redefinindo...'); var r=await resetSenha(id,nova); hideLoading();
+  toastSeguro(r&&r.ok?'🔑 Senha redefinida. Informe a nova senha ao usuário.':'⚠️ Não foi possível redefinir.',r&&r.ok?'success':'warning');
+}
+async function salvarPerfil(){
+  var nome=$('perfil-nome').value.trim(), senha=$('perfil-senha').value, senha2=$('perfil-senha2').value, er=$('perfil-error');
+  er.style.display='none';
+  if(!nome){ er.textContent='Informe seu nome.'; er.style.display='block'; return; }
+  if(senha&&senha.length<6){ er.textContent='A senha deve ter pelo menos 6 caracteres.'; er.style.display='block'; return; }
+  if(senha&&senha!==senha2){ er.textContent='As senhas não conferem.'; er.style.display='block'; return; }
+  showLoading('Salvando perfil...');
+  try{
+    await updateProfile({name:nome,password:senha||undefined});
+    $('sf-username').textContent=currentUser.name+' ('+(window.vnRoleLabel?window.vnRoleLabel(currentUser.role):currentUser.role)+')';
+    hideLoading(); closeModal('modal-perfil'); toastSeguro('✅ Perfil atualizado com sucesso!','success');
+  }catch(e){ hideLoading(); er.textContent='Erro ao salvar: '+e.message; er.style.display='block'; }
+}
+
+window.vnAuth={login:login,register:register,logout:logout,checkRemembered:checkRemembered,listUsers:listUsers,updateUser:updateUser,
+  renderUsuarios:renderUsuarios,aprovar:aprovar,revogar:revogar,excluir:excluir,redefinir:redefinir,salvarPerfil:salvarPerfil,
+  logado:function(){return !!(sess&&sess.token);},prefetch:prefetch,pre:pre,user:function(){return sess&&sess.user;},_sess:function(){return sess;}};
+})();
+
+</script>
+<script>
 // DATA PLACEHOLDER - will be replaced
 const PRODUCTS_RAW = [{"id":1,"cod_bionexo":"HLR166","cod_hlr":"256311","material":"ACIDO URSODESOXICOLICO 150 MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":2,"cod_bionexo":"43","cod_hlr":"43","material":"AAS 100MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":3,"cod_bionexo":"1615","cod_hlr":"1615","material":"ABOCATH 14","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":4,"cod_bionexo":"417","cod_hlr":"417","material":"ABOCATH 16","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":5,"cod_bionexo":"418","cod_hlr":"418","material":"ABOCATH 18","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":6,"cod_bionexo":"419","cod_hlr":"419","material":"ABOCATH 20","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":7,"cod_bionexo":"420","cod_hlr":"420","material":"ABOCATH 22","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":8,"cod_bionexo":"421","cod_hlr":"421","material":"ABOCATH 24","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":9,"cod_bionexo":"ACINJ","cod_hlr":"25000120","material":"ACETILCISTEINA 100MG/ML 3ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":10,"cod_bionexo":"22803","cod_hlr":"22803","material":"ACETILCISTEINA 600MG ENV","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":11,"cod_bionexo":"1","cod_hlr":"1","material":"ACICLOVIR 200 CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":12,"cod_bionexo":"2","cod_hlr":"2","material":"ACICLOVIR 250MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":13,"cod_bionexo":"8879","cod_hlr":"8879","material":"ACIDO FOLICO 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":14,"cod_bionexo":"25990","cod_hlr":"25990","material":"ÁCIDO TRANEXAMICO 50MG/ML 5ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":15,"cod_bionexo":"2148","cod_hlr":"2148","material":"Ácido Valproico 250mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":16,"cod_bionexo":"AC1","cod_hlr":"25000123","material":"ACIDO VALPROICO 50MG/ML SOL ORAL 100ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":17,"cod_bionexo":"HLR28","cod_hlr":"20929","material":"ACIDOS GRAXOS + ASSOCIACOES (DERSANI) 200ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":18,"cod_bionexo":"22809","cod_hlr":"22809","material":"ADAPTADOR PARA FRASCO DE SORO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":19,"cod_bionexo":"22547","cod_hlr":"22547","material":"ADENOSINA 3MG/ML 2ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":20,"cod_bionexo":"534","cod_hlr":"534","material":"AGUA DESTILADA 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":21,"cod_bionexo":"HRES 104","cod_hlr":"1679","material":"AGUA DESTILADA 250ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":22,"cod_bionexo":"344","cod_hlr":"344","material":"ÁGUA OXIGENADA 3% 10 VOLUMES 1L","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":23,"cod_bionexo":"344","cod_hlr":"344","material":"ÁGUA OXIGENADA 3% 10 VOLUMES 1L","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":24,"cod_bionexo":"135","cod_hlr":"135","material":"AGUA P/ INJEÇÃO 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":25,"cod_bionexo":"136","cod_hlr":"136","material":"AGUA P/ INJEÇÃO 20ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":26,"cod_bionexo":"316","cod_hlr":"249950","material":"AGULHA 13X4,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":27,"cod_bionexo":"HLR2437","cod_hlr":"25000121","material":"AGULHA 20X0,55","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":28,"cod_bionexo":"ALPHARAD","cod_hlr":"25000138","material":"AGULHA BIOPSIA TECIDOS MOLES (MAMARIA) 14GX100MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":29,"cod_bionexo":"HLR135","cod_hlr":"25000137","material":"AGULHA DE FÍSTULA C/ DISPOSITIVO DE SEGURANÇA 16G","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":30,"cod_bionexo":"317","cod_hlr":"317","material":"AGULHA DESC. 25X7","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"WILTEX","status":"normal","validade":null},{"id":31,"cod_bionexo":"TEMPO3","cod_hlr":"24546","material":"AGULHA DESC. 25X8","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"WILTEX","status":"normal","validade":null},{"id":32,"cod_bionexo":"25911","cod_hlr":"25825","material":"AGULHA DESC. 30X7","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"WILTEX","status":"normal","validade":null},{"id":33,"cod_bionexo":"318","cod_hlr":"318","material":"AGULHA DESC. 40X12","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"WILTEX","status":"normal","validade":null},{"id":34,"cod_bionexo":"HLR130","cod_hlr":"25000124","material":"AGULHA EPIDURAL 18GX3,5 REF WEISS 408356","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":35,"cod_bionexo":"20762","cod_hlr":"20762","material":"AGULHA SPINAL 20GX3,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":36,"cod_bionexo":"1740","cod_hlr":"1740","material":"AGULHA SPINAL 22GX3,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":37,"cod_bionexo":"335","cod_hlr":"25000128","material":"AGULHA SPINAL 25GX3,5 ponta quincke (azul) SUBST A LARANJA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":38,"cod_bionexo":"1510","cod_hlr":"1510","material":"AGULHA SPINAL 27GX3,5 ponta quincke","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":39,"cod_bionexo":"HLR97","cod_hlr":"25000126","material":"AGULHA SPINAL 27X3,5 PONTA LAPIS (CINZA)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":40,"cod_bionexo":"1714","cod_hlr":"1714","material":"ALBENDAZOL 400MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":41,"cod_bionexo":"250925","cod_hlr":"25000125","material":"ALBENDAZOL 40MG/ML SUSPENSAO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":42,"cod_bionexo":"549","cod_hlr":"549","material":"ALGODÃO 500 GR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":43,"cod_bionexo":"1540","cod_hlr":"1540","material":"ALOPURINOL 100MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":44,"cod_bionexo":"HLR25000113","cod_hlr":"25000113","material":"ALTEPLASE 50MG FR.AMP + DIL 50 ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":45,"cod_bionexo":"4","cod_hlr":"4","material":"AMICACINA SULFATO 250MG/ML 2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":46,"cod_bionexo":"208","cod_hlr":"208","material":"AMINOFILINA 24MG/ML 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":47,"cod_bionexo":"214","cod_hlr":"214","material":"AMIODARONA CLORIDRATO 150MG/3ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":48,"cod_bionexo":"215","cod_hlr":"215","material":"AMIODARONA CLORIDRATO 200MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":49,"cod_bionexo":"54","cod_hlr":"54","material":"AMITRIPTILINA 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":50,"cod_bionexo":"HLR165","cod_hlr":"25000135","material":"AMOXICILINA + CLAVULANATO POTASSIO 250MG/5ML 75ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":51,"cod_bionexo":"24536","cod_hlr":"24536","material":"AMOXICILINA 500MG + CLAVULANATO 125MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":52,"cod_bionexo":"5","cod_hlr":"5","material":"AMOXICILINA 500MG CAP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":53,"cod_bionexo":"6","cod_hlr":"6","material":"AMPICILINA 1G FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":54,"cod_bionexo":"249520","cod_hlr":"249520","material":"AMPICILINA+SULBACTAM 2G+1G FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":55,"cod_bionexo":"10","cod_hlr":"10","material":"ANFOTERICINA B 5MG/ML 10ML FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":56,"cod_bionexo":"1507","cod_hlr":"1507","material":"ANLODIPINO BESILATO 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":57,"cod_bionexo":"HLR75","cod_hlr":"25001016","material":"ANUSSCOPIO RETAL DESCARTÁVEL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":58,"cod_bionexo":"20198","cod_hlr":"20198","material":"APARELHO BARBEAR DESC.","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":59,"cod_bionexo":"ACHLR","cod_hlr":"249883","material":"ATADURA CREPOM 10CMX1,8M NEVE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":60,"cod_bionexo":"23298","cod_hlr":"23298","material":"ATADURA CREPOM 15CMX1,8M NEVE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":61,"cod_bionexo":"494","cod_hlr":"25000141","material":"ATADURA DE CREPOM 20X4.5 (NEVE)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":62,"cod_bionexo":"23296","cod_hlr":"23296","material":"ATADURA DE CREPOM 6X1,8MT neve","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":63,"cod_bionexo":"25182","cod_hlr":"25000323","material":"ATADURA DE RAYON 7,5CM X 5M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":64,"cod_bionexo":"ATHLR","cod_hlr":"25000370","material":"ATADURA ELASTICA AUTOADESIVA 5CMX4,5M COR DA PELE REF. 2082","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":65,"cod_bionexo":"20470","cod_hlr":"20470","material":"ATADURA GESSADA 10CM X 3MT","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":66,"cod_bionexo":"CB8","cod_hlr":"249878","material":"ATADURA GESSADA 15CMX3MT","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":67,"cod_bionexo":"CB9","cod_hlr":"21291","material":"ATADURA GESSADA 20CMX4MT","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":68,"cod_bionexo":"HLR198","cod_hlr":"25000147","material":"ATADURA ORTOPÉDICA 10CM ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":69,"cod_bionexo":"HLR199","cod_hlr":"20469","material":"ATADURA ORTOPÉDICA 15CM** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":70,"cod_bionexo":"HLR200","cod_hlr":"250241","material":"ATADURA ORTOPÉDICA 20CM ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":71,"cod_bionexo":"1542","cod_hlr":"1542","material":"ATENOLOL 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":72,"cod_bionexo":"249597","cod_hlr":"249597","material":"ATRACURIO BESILATO 10MG/ML 2,5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":73,"cod_bionexo":"183","cod_hlr":"183","material":"ATRACURIO BESILATO 10MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":74,"cod_bionexo":"10103480","cod_hlr":"256313","material":"ATROPINA 1% COLIRIO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":75,"cod_bionexo":"HLR208","cod_hlr":"20423","material":"ATROPINA SULFATO 0,25MG/ML 1ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":76,"cod_bionexo":"2093","cod_hlr":"2093","material":"AZITROMICINA 500MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":77,"cod_bionexo":"23422","cod_hlr":"23422","material":"AZITROMICINA 600MG SUSP ORAL FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":78,"cod_bionexo":"HLR218","cod_hlr":"25000143","material":"AZUL PATENTE 2,5% 2ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":79,"cod_bionexo":"HLR2406","cod_hlr":"249621","material":"BANDAGEM ELASTICA ADESIVA 5CM X 4,5M (TENSOPLAST)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":80,"cod_bionexo":"11","cod_hlr":"11","material":"BENZILPENICILINA 1.200.000 UI FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":81,"cod_bionexo":"HLR136","cod_hlr":"1596","material":"BENZILPENICILINA BENZATINA 600.000UI FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":82,"cod_bionexo":"38","cod_hlr":"38","material":"BENZILPENICILINA CRISTALINA 5.000.000UI FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":83,"cod_bionexo":"HLR236","cod_hlr":"25000148","material":"BETAMETASONA (ACETATO+FOSFATO) 6MG SOL INJ AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":84,"cod_bionexo":"143","cod_hlr":"143","material":"BICARBONATO DE SODIO 8,4% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":85,"cod_bionexo":"1543","cod_hlr":"1543","material":"BICARBONATO DE SODIO 8,4% 250ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":86,"cod_bionexo":"58","cod_hlr":"58","material":"BIPERIDENO CLORIDRATO 2MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":87,"cod_bionexo":"59","cod_hlr":"59","material":"BIPERIDENO CLORIDRATO 5MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":88,"cod_bionexo":"258","cod_hlr":"258","material":"BISACODIL 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":89,"cod_bionexo":"HLR74","cod_hlr":"23772","material":"BOLSA COLOSTOMIA DRENÁVEL (KARAYA) TRANSPARENTE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":90,"cod_bionexo":"HLR51","cod_hlr":"25000151","material":"BOLSA COLOSTOMIA N 50","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":91,"cod_bionexo":"HLR266","cod_hlr":"25000153","material":"BOLSA DE COLOSTOMIA Nº 63","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":92,"cod_bionexo":"197","cod_hlr":"197","material":"BROMOPRIDA 5 MG/ML 2 ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":93,"cod_bionexo":"249580","cod_hlr":"249580","material":"BRONQUINHO FRASCO COLETOR DE VIAS AEREAS 120ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":94,"cod_bionexo":"186","cod_hlr":"186","material":"BUPIVACAINA 0,5% + EPINEFRINA 0,0091 (1:200000) COM VASO 20ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":95,"cod_bionexo":"187","cod_hlr":"187","material":"BUPIVACAINA 0,5% 20ML SEM VASO FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":96,"cod_bionexo":"185","cod_hlr":"185","material":"BUPIVACAINA 0,5%+ GLICOSE 8% 4ML (PESADA COM ESTOJO ESTERIL)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":97,"cod_bionexo":"HLR144","cod_hlr":"25001162","material":"CABERGOLINA 0,5MG COMPRIMIDO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":98,"cod_bionexo":"HLR59","cod_hlr":"25000155","material":"CABO ELETRODO TEMPORARIO 6FR. PARA MARCAPASSO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":99,"cod_bionexo":"WHITE MARTINS","cod_hlr":"250164","material":"CANULA DE ALTO FLUXO ADULTO PF","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":100,"cod_bionexo":"249984","cod_hlr":"250162","material":"CANULA TRAQUEOSTOMIA C/B 9.0MM DESCARTAVEL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":101,"cod_bionexo":"22036","cod_hlr":"","material":"CANULA TRAQUEOSTOMIA METALICA CURTA 6,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":102,"cod_bionexo":"HLR164","cod_hlr":"","material":"CANULA TRAQUEOSTOMIA METALICA CURTA 7,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":103,"cod_bionexo":"HLRCAN4","cod_hlr":"250254","material":"CANULA TRAQUEOSTOMIA METALICA Nº 4 STANDARD** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":104,"cod_bionexo":"24380","cod_hlr":"24380","material":"CANULA TRAQUEOSTOMIA METALICA Nº 6 STANDARD ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":105,"cod_bionexo":"20876","cod_hlr":"20876","material":"CAPA PARA OBITO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":106,"cod_bionexo":"241","cod_hlr":"241","material":"CAPTOPRIL 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":107,"cod_bionexo":"HLR330","cod_hlr":"25000152","material":"CAPTOPRIL 50MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":108,"cod_bionexo":"65","cod_hlr":"65","material":"CARBAMAZEPINA 200MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":109,"cod_bionexo":"18832818","cod_hlr":"250283","material":"CARBAMAZEPINA 20MG/ML SOL ORAL 100ML FR ++","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":110,"cod_bionexo":"CARBONATODECALCIO","cod_hlr":"25000154","material":"CARBONATO DE CALCIO 600MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":111,"cod_bionexo":"67","cod_hlr":"67","material":"CARBONATO DE LITIO 300MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":112,"cod_bionexo":"HLR1921","cod_hlr":"25000156","material":"CARVAO ATIVADO 10G/ 50ML FRASCO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":113,"cod_bionexo":"22057","cod_hlr":"22057","material":"CARVEDILOL 3,125MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":114,"cod_bionexo":"20823","cod_hlr":"20823","material":"CARVEDILOL 6,25 CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":115,"cod_bionexo":"HLR349","cod_hlr":"25000168","material":"CATETER DE OXIGÊNIO N° 10** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":116,"cod_bionexo":"HLR52","cod_hlr":"20314","material":"CATETER DE OXIGÊNIO N° 6** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":117,"cod_bionexo":"HLR43","cod_hlr":"447","material":"CATETER DE OXIGENIO N° 8** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":118,"cod_bionexo":"2115","cod_hlr":"2115","material":"CATETER DE OXIGENIO TIPO OCULOS n 12 adulto","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":119,"cod_bionexo":"HLR84","cod_hlr":"249891","material":"CATETER DE OXIGENIO TIPO OCULOS n8 – INFANTIL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":120,"cod_bionexo":"HLR1809","cod_hlr":"25000163","material":"CATETER DUPLO J 6FRX26CM** contar+ interno","pedido":null,"urgente":"","marcas_pad":"BLUEMM","marcas_desq":"","status":"normal","validade":null},{"id":121,"cod_bionexo":"23793","cod_hlr":"23793","material":"CATETER DUPLO LUMEN 7FR 20CM","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":122,"cod_bionexo":"HLR140","cod_hlr":"25000166","material":"CATETER EPIDURAL Nº 18","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":123,"cod_bionexo":"HLR1946","cod_hlr":"25000180","material":"CATETER PAM ARTERIAL RADIAL 20GA X 8CM","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":124,"cod_bionexo":"HLR83","cod_hlr":"25000999","material":"CATETER PAM ARTERIAL RADIAL 22GA X 8CM","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":125,"cod_bionexo":"20749","cod_hlr":"20749","material":"CATETER SINGLE/ MONO LUMEN 14GX20CM","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":126,"cod_bionexo":"HLR62","cod_hlr":"25000183","material":"CATETER UMBILICAL 2.5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":127,"cod_bionexo":"HLR53","cod_hlr":"25000184","material":"CATETER UMBILICAL 3.5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":128,"cod_bionexo":"HLR54","cod_hlr":"25000185","material":"CATETER UMBILICAL 5.0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":129,"cod_bionexo":"HC25905","cod_hlr":"2500058","material":"CATETER VIA CURVA DUPLO HEMODIÁLISE *UTI* (SHILLER)","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":130,"cod_bionexo":"HLR26","cod_hlr":"25000181","material":"CATETER VIA CURVA TRIPLO HEMODIÁLISE *UTI* 12FRX20CM","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":131,"cod_bionexo":"HSAPCEF","cod_hlr":"25000157","material":"CEFALEXINA 250MG/5ML SUSP ORAL 60ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":132,"cod_bionexo":"15","cod_hlr":"15","material":"CEFALEXINA MONOIDRATADA 500MG CAP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":133,"cod_bionexo":"CB14","cod_hlr":"20425","material":"CEFAZOLINA 1G FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":134,"cod_bionexo":"20639","cod_hlr":"20639","material":"CEFEPIMA 1G IM/IV FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":135,"cod_bionexo":"17","cod_hlr":"17","material":"CEFTRIAXONA 1G (IV/IM) FR.AMP.","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":136,"cod_bionexo":"251955","cod_hlr":"17","material":"CEFTRIAXONA 1G, IM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":137,"cod_bionexo":"20450","cod_hlr":"20450","material":"CEFUROXIMA 750MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":138,"cod_bionexo":"CETAMINA100","cod_hlr":"249898","material":"CETAMINA 100MG/2ML SOL. INJETAVEL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":139,"cod_bionexo":"HLR20","cod_hlr":"25000159","material":"CETOCONAZOL TOPICO 2% 30G TB","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":140,"cod_bionexo":"HSAP17","cod_hlr":"8898","material":"CETOPROFENO 100MG/100 ML PRONYO P/ USO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":141,"cod_bionexo":"CB11","cod_hlr":"25000161","material":"CETOPROFENO 50MG CAPS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":142,"cod_bionexo":"1573","cod_hlr":"1573","material":"CILOSTAZOL 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":143,"cod_bionexo":"HLR2175","cod_hlr":"199","material":"CIMETIDINA 300MG/2ML SOL INJ AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":144,"cod_bionexo":"HLR153","cod_hlr":"25000165","material":"CIPROFIBRATO 100MG COMPRIMIDO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":145,"cod_bionexo":"18","cod_hlr":"249899","material":"CIPROFLOXACINO 2MG/ML-100ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":146,"cod_bionexo":"WHITE MARTINS","cod_hlr":"250163","material":"CIRCUITO ALTO FLUXO PF","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":147,"cod_bionexo":"19","cod_hlr":"19","material":"CLINDAMICINA CLORIDRATO 600MG/4ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":148,"cod_bionexo":"HLR1984","cod_hlr":"25000191","material":"CLIP RETO PARA BOLSA DE COLOSTOMIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":149,"cod_bionexo":"HRES 2","cod_hlr":"25000169","material":"CLONAZEPAM 0,5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":150,"cod_bionexo":"69","cod_hlr":"69","material":"CLONAZEPAM 2MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":151,"cod_bionexo":"18768618","cod_hlr":"24992","material":"CLONIDINA 150MCG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":152,"cod_bionexo":"293","cod_hlr":"293","material":"CLONIDINA CLORIDRATO 150MCG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":153,"cod_bionexo":"20638","cod_hlr":"20638","material":"CLOPIDOGREL 75MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":154,"cod_bionexo":"149","cod_hlr":"149","material":"CLORETO DE POTASSIO 10% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":155,"cod_bionexo":"150","cod_hlr":"150","material":"CLORETO DE POTASSIO 6% SOLUÇÃO ORAL 150ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":156,"cod_bionexo":"26112","cod_hlr":"26112","material":"CLORETO DE POTASSIO 600MG DRG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":157,"cod_bionexo":"151","cod_hlr":"151","material":"CLORETO DE SODIO 20% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":158,"cod_bionexo":"20745","cod_hlr":"20745","material":"CLOREXIDINA ENXAGUATÓRIO BUCAL 0,12%","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":159,"cod_bionexo":"77","cod_hlr":"77","material":"Clorpromazina 100mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":160,"cod_bionexo":"79","cod_hlr":"79","material":"CLORPROMAZINA CLORIDRATO 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":161,"cod_bionexo":"80","cod_hlr":"80","material":"CLORPROMAZINA CLORIDRATO 40MG/ML FR 20ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":162,"cod_bionexo":"78","cod_hlr":"78","material":"CLORPROMAZINA CLORIDRATO 5MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":163,"cod_bionexo":"24988","cod_hlr":"24988","material":"CODEINA 30MG + PARACETAMOL 500MG COMP ++","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":164,"cod_bionexo":"20722","cod_hlr":"20722","material":"COLAGENASE C/ CLORANFENICOL TB POMADA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":165,"cod_bionexo":"HRES 28","cod_hlr":"25000179","material":"COLCHICINA 0,5MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":166,"cod_bionexo":"554","cod_hlr":"22812","material":"COLETOR DE SECREÇOES SISTEMA ABERTO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":167,"cod_bionexo":"250405","cod_hlr":"249890","material":"COLETOR DE URINA -INFANTIL ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":168,"cod_bionexo":"555","cod_hlr":"555","material":"COLETOR DE URINA SISTEMA FECHADO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":169,"cod_bionexo":"HLR146","cod_hlr":"250210","material":"COLIRIO ANESTESICO - CLORIDRATO DE PROXIMETACAÍNA 5 MG/ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":170,"cod_bionexo":"24143","cod_hlr":"24143","material":"COMPRESSA GAZE CADARÇO CAMPO OPERATÓRIO ESTÉRIL 25X28 (C/5UN.)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"MEDI HOUSE","status":"normal","validade":null},{"id":171,"cod_bionexo":"HLR1375","cod_hlr":"25875","material":"CONTRASTE IODADO - OMNIPAQUE 300MG 50ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":172,"cod_bionexo":"MULTIRAD","cod_hlr":"25000662","material":"CONTRASTE IODADO 500ML - TOMOGRAFIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":173,"cod_bionexo":"553","cod_hlr":"25000199","material":"CORD-CLAMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":174,"cod_bionexo":"250543","cod_hlr":"2501","material":"COTONETE DESC","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":175,"cod_bionexo":"11385687","cod_hlr":"25001106","material":"CREME HIDROGEL BARREIRA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":176,"cod_bionexo":"2501200","cod_hlr":"2501200","material":"CURATIVO AQUACEL AG + EXTRA CONVANTEC 10X10CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":177,"cod_bionexo":"HLR493","cod_hlr":"25000201","material":"CURATIVO HIDROCOLOIDE 10X10CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":178,"cod_bionexo":"23946","cod_hlr":"23946","material":"CURATIVO TEGADERM FILME 10X12CM REF. 1626W","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":179,"cod_bionexo":"","cod_hlr":"","material":"CURATIVO ADESIVO EM ROLO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":180,"cod_bionexo":"HLR133","cod_hlr":"25000182","material":"DANTROLENE 20MG SOL INJ FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":181,"cod_bionexo":"216","cod_hlr":"216","material":"DESLANOSIDEO 0,2MG/ML 2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":182,"cod_bionexo":"237","cod_hlr":"237","material":"DEXAMETASONA 10MG 2,5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":183,"cod_bionexo":"239","cod_hlr":"239","material":"DEXAMETASONA 1MG/G CREME TB 10GR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":184,"cod_bionexo":"1715","cod_hlr":"1715","material":"DEXAMETASONA 4MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":185,"cod_bionexo":"HLR512","cod_hlr":"25000190","material":"DEXAMETASONA+NEOMICINA+POLIMIXINA COLIRIO 5ML FR (MAXITROL)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":186,"cod_bionexo":"HRES 6","cod_hlr":"249879","material":"DEXCLORFENIRAMINA 0,4MG/ML SOL ORAL FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":187,"cod_bionexo":"250161","cod_hlr":"249982","material":"DEXMEDETOMIDINA 200MCG/2ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":188,"cod_bionexo":"HLR2089","cod_hlr":"25000202","material":"DIALISADOR PS220 (CAPILAR BAIXO FLUXO AREA 2.2) DIALISE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":189,"cod_bionexo":"83","cod_hlr":"83","material":"DIAZEPAM 10MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":190,"cod_bionexo":"82","cod_hlr":"82","material":"DIAZEPAM 10MG/2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":191,"cod_bionexo":"84","cod_hlr":"84","material":"DIAZEPAM 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":192,"cod_bionexo":"271","cod_hlr":"271","material":"DICLOFENACO DE SODIO 25MG/ML 3ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":193,"cod_bionexo":"272","cod_hlr":"272","material":"DICLOFENACO DE SODIO 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":194,"cod_bionexo":"HLR35","cod_hlr":"25000193","material":"DICLOFENACO DIETILAMONIO 1% 60G TB","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":195,"cod_bionexo":"18831686","cod_hlr":"25000195","material":"DIFENIDRAMINA 50MG/ML 1ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":196,"cod_bionexo":"243","cod_hlr":"243","material":"DIGOXINA 0,25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":197,"cod_bionexo":"251860","cod_hlr":"25000196","material":"Dimenidrinato + Cloridrato de Piridoxina GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":198,"cod_bionexo":"230","cod_hlr":"230","material":"DIMENIDRINATO 30MG + PIR 50MG + GLIC + FRUT AMP10ML - DRAMIN B6 AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":199,"cod_bionexo":"48","cod_hlr":"48","material":"DIPIRONA SODICA 500MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":200,"cod_bionexo":"47","cod_hlr":"47","material":"DIPIRONA SODICA 500MG/ML 2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":201,"cod_bionexo":"49","cod_hlr":"49","material":"DIPIRONA SODICA 500MG/ML FR 10ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":202,"cod_bionexo":"425","cod_hlr":"425","material":"DISPOSITIVO INFUSÃO VENOSA 21*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":203,"cod_bionexo":"426","cod_hlr":"426","material":"DISPOSITIVO INFUSÃO VENOSA 23*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":204,"cod_bionexo":"427","cod_hlr":"427","material":"DISPOSITIVO INFUSÃO VENOSA 25*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":205,"cod_bionexo":"428","cod_hlr":"428","material":"DISPOSITIVO INFUSÃO VENOSA 27G","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":206,"cod_bionexo":"HLR81","cod_hlr":"25000205","material":"DISPOSITIVO INTRAVENOSO CURTO 24G NEO – 0,7X14MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":207,"cod_bionexo":"HLR44","cod_hlr":"25000207","material":"DISPOSITIVO URINARIO DE LATEX N5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":208,"cod_bionexo":"25000208","cod_hlr":"25000208","material":"DISPOSITIVO URINARIO DE LATEX N6","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":209,"cod_bionexo":"244","cod_hlr":"244","material":"DOBUTAMINA CLORIDRATO 250MG 20ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":210,"cod_bionexo":"25841","cod_hlr":"25841","material":"DOMPERIDONA SUSP 100ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":211,"cod_bionexo":"245","cod_hlr":"245","material":"DOPAMINA CLORIDRATO 5MG/ML 10ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":212,"cod_bionexo":"249446","cod_hlr":"249446","material":"DOXASOZINA 2MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":213,"cod_bionexo":"486","cod_hlr":"486","material":"DRENO DE PENROSE 1","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":214,"cod_bionexo":"487","cod_hlr":"487","material":"DRENO DE PENROSE 2","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":215,"cod_bionexo":"488","cod_hlr":"488","material":"DRENO DE PENROSE 3","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":216,"cod_bionexo":"489","cod_hlr":"489","material":"DRENO DE PENROSE 4","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":217,"cod_bionexo":"250693","cod_hlr":"249889","material":"DRENO DE TORAX 28 ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":218,"cod_bionexo":"21547","cod_hlr":"21547","material":"DRENO DE TORAX 32 ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":219,"cod_bionexo":"20377","cod_hlr":"20377","material":"DRENO DE TORAX 34 ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":220,"cod_bionexo":"20378","cod_hlr":"20378","material":"DRENO DE TORAX 36 ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":221,"cod_bionexo":"10719095","cod_hlr":"249739","material":"DRENO DE TORAX N 18","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":222,"cod_bionexo":"HLR1822","cod_hlr":"25000224","material":"DRENO DE TORAX N 40","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":223,"cod_bionexo":"HRES 63","cod_hlr":"25000352","material":"DRENO DE TORAX N.20","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":224,"cod_bionexo":"HLR131","cod_hlr":"25000219","material":"DRENO DE TORAX N.26","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":225,"cod_bionexo":"HSAPD30","cod_hlr":"249732","material":"DRENO DE TORAX N.30","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":226,"cod_bionexo":"HRES 66","cod_hlr":"25000222","material":"DRENO DE TORAX N.38","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":227,"cod_bionexo":"HLR6","cod_hlr":"25000212","material":"DRENO DE TORAX N10","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":228,"cod_bionexo":"250850","cod_hlr":"249737","material":"DRENO DE TORAX N16","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":229,"cod_bionexo":"HLR586","cod_hlr":"25000234","material":"DRENO PORTO-VAC 1/8 3,2MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":230,"cod_bionexo":"HLR25","cod_hlr":"25000230","material":"DRENO PORTO-VAC ¼ 6,4MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":231,"cod_bionexo":"HLR143","cod_hlr":"25000236","material":"DRENO PORTO-VAC 3/16 4,8MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":232,"cod_bionexo":"20828","cod_hlr":"20828","material":"DRENO SUC. EM T (KEHR) N 18","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":233,"cod_bionexo":"HLR63","cod_hlr":"25000237","material":"DRENO SUC. EM T (KEHR) N 20","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":234,"cod_bionexo":"HLR56","cod_hlr":"25000216","material":"DRENO TORAX Nº 22","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":235,"cod_bionexo":"192","cod_hlr":"192","material":"EFEDRINA SULFATO 50MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":236,"cod_bionexo":"561","cod_hlr":"561","material":"ELETRODO DESC. ADULTO COM GEL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":237,"cod_bionexo":"21792","cod_hlr":"21792","material":"ELETRODO DESCARTAVEL INFANTIL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":238,"cod_bionexo":"246","cod_hlr":"246","material":"ENALAPRIL MALEATO 10MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":239,"cod_bionexo":"1623","cod_hlr":"1623","material":"ENALAPRIL MALEATO 20MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":240,"cod_bionexo":"535","cod_hlr":"535","material":"ENEMA GLICERINADO 12% FR 500ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":241,"cod_bionexo":"20751","cod_hlr":"20751","material":"ENOXAPARINA 40MG/0,4ML IV/SC","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":242,"cod_bionexo":"21375","cod_hlr":"21375","material":"ENOXAPARINA 60MG/0,6ML IV/SC","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":243,"cod_bionexo":"HRES 8","cod_hlr":"25000206","material":"ENOXAPARINA 80MG (IV/SC) SERINGA +","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":244,"cod_bionexo":"294","cod_hlr":"294","material":"EPINEFRINA HEMITARTARATO AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":245,"cod_bionexo":"25000192","cod_hlr":"25000192","material":"EQUIPO ARTERIAL/VENOSO (LINHA) MODELO 184,BP PARA DIALISE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":246,"cod_bionexo":"20400","cod_hlr":"20400","material":"EQUIPO BURETA MICRO GRADUACAO150ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":247,"cod_bionexo":"HLR36","cod_hlr":"395","material":"EQUIPO FOTOSSENSIVEL P/ B.I. EQL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":248,"cod_bionexo":"396","cod_hlr":"396","material":"EQUIPO MACRO GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":249,"cod_bionexo":"399","cod_hlr":"399","material":"EQUIPO MICROGOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":250,"cod_bionexo":"20721","cod_hlr":"20721","material":"EQUIPO MULTIVIAS POLIFIX ADULTO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":251,"cod_bionexo":"E1","cod_hlr":"25000197","material":"EQUIPO P/ B.I. PARENTERAL -EQLP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":252,"cod_bionexo":"25815","cod_hlr":"25815","material":"EQUIPO P/ TRANSFUSÃO DE SANGUE C/ FILTRO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"BIOBASE/FABRICANTE SHADONG WEIGAO GROUP MEDICAL","status":"normal","validade":null},{"id":253,"cod_bionexo":"HLR616","cod_hlr":"25000198","material":"EQUIPO PARA IRRIGACAO 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":254,"cod_bionexo":"EIAHLR","cod_hlr":"25000200","material":"EQUIPO PARA IRRIGACAO 4 VIAS PARA ARTROSCOPIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":255,"cod_bionexo":"HSAP1","cod_hlr":"2500108","material":"Escitalopram 10mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":256,"cod_bionexo":"138","cod_hlr":"138","material":"ESCOPOLAMINA (HIOSCINA) 10MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":257,"cod_bionexo":"139","cod_hlr":"139","material":"ESCOPOLAMINA (HIOSCINA) 10MG/ML FR 20ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":258,"cod_bionexo":"20441","cod_hlr":"20441","material":"ESCOPOLAMINA (HIOSCINA) 20MG/ML 1ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":259,"cod_bionexo":"392","cod_hlr":"392","material":"ESPARADRAPO 10X4.5 MT","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"WILTEX","status":"normal","validade":null},{"id":260,"cod_bionexo":"297","cod_hlr":"297","material":"ESPIRONOLACTONA 100MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":261,"cod_bionexo":"295","cod_hlr":"295","material":"ESPIRONOLACTONA 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":262,"cod_bionexo":"HLR77","cod_hlr":"25001014","material":"ESPONJA HEMOSTÁTICA – SURGICEL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":263,"cod_bionexo":"HLR647","cod_hlr":"25000210","material":"ETILEFRINA 10MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":264,"cod_bionexo":"23989","cod_hlr":"20731","material":"EXTENSOR ASPIRACAO 3M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":265,"cod_bionexo":"20617","cod_hlr":"20617","material":"EXTENSOR DE OXIGENIO 2M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"MEDIX","status":"normal","validade":null},{"id":266,"cod_bionexo":"416","cod_hlr":"416","material":"EXTENSOR EQUIPO 60CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":267,"cod_bionexo":"86","cod_hlr":"86","material":"FENITOINA 100MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":268,"cod_bionexo":"87","cod_hlr":"87","material":"FENITOINA 50MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":269,"cod_bionexo":"88","cod_hlr":"25001083","material":"Fenobarbital 100mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":270,"cod_bionexo":"HRES 9","cod_hlr":"89","material":"FENOBARBITAL 200MG/2ML 2ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":271,"cod_bionexo":"10340925","cod_hlr":"249487","material":"FENOBARBITAL 4% PEDIATRICO GOTAS 20ML FR ++","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":272,"cod_bionexo":"209","cod_hlr":"25000149","material":"FENOTEROL BROMIDRATO100MCG/DOSE SPRAY","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":273,"cod_bionexo":"172","cod_hlr":"172","material":"FENTANILA CITRATO 0,05MG/ML 2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":274,"cod_bionexo":"8877","cod_hlr":"8877","material":"FENTANILA CITRATO 0,05MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":275,"cod_bionexo":"194","cod_hlr":"194","material":"FENTANILA CITRATO 0,05MG/ML FA 10ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":276,"cod_bionexo":"20572","cod_hlr":"20572","material":"FILTRO BACTERIANO C/ TRAQUEIA ADULTO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"BIOTEC","status":"normal","validade":null},{"id":277,"cod_bionexo":"HLR716","cod_hlr":"25000203","material":"FILTRO BACTERIANO SERVO DUO GUARD BARRIERBAC 350/5422","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":278,"cod_bionexo":"250861","cod_hlr":"25000204","material":"FILTRO BARR. BACT/VIRUS PEDIAT C/CONEX. CAPNOGRAFIA TRAQUEIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":279,"cod_bionexo":"HLR737","cod_hlr":"25000209","material":"FIO CERCALAGEM 1,0MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":280,"cod_bionexo":"HLR738","cod_hlr":"25000211","material":"FIO CERCALAGEM 1,2MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":281,"cod_bionexo":"HLR21","cod_hlr":"25000213","material":"FIO DE KIRSCHNER 1,0MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":282,"cod_bionexo":"HLR740","cod_hlr":"25000438","material":"FIO DE KIRSCHNER 1,5MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":283,"cod_bionexo":"HLR741","cod_hlr":"25000439","material":"FIO DE KIRSCHNER 2,0MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":284,"cod_bionexo":"HLR732","cod_hlr":"25000214","material":"FIO DE KIRSCHNER 2,5MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":285,"cod_bionexo":"HLR125","cod_hlr":"25000215","material":"FIO DE KIRSCHNER 3,0MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":286,"cod_bionexo":"HLR745","cod_hlr":"25000217","material":"FIO DE KIRSCHNER 3,5MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":287,"cod_bionexo":"HLR138","cod_hlr":"25000218","material":"FIO DE KIRSCHNER 4,0MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":288,"cod_bionexo":"HLR1990","cod_hlr":"25000220","material":"FIO DE KIRSCHNER ROSQUEADO 2,0MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":289,"cod_bionexo":"HLR1992","cod_hlr":"25000221","material":"FIO DE KIRSCHNER ROSQUEADO 2,5MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":290,"cod_bionexo":"HLR920","cod_hlr":"25000223","material":"FIO GUIA HIDROFILICO 0,035\"X150CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":291,"cod_bionexo":"HLR37","cod_hlr":"25000225","material":"FITA ADESIVA CIRURGICA BEGE HIPOALERGICA 50MMX10M(MICROPORE)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":292,"cod_bionexo":"394","cod_hlr":"394","material":"FITA MICROPORE 25MMX10M COM CAPA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":293,"cod_bionexo":"20833","cod_hlr":"20833","material":"FITA MICROPORE 50MMCm x 10mT","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":294,"cod_bionexo":"FUFAMED","cod_hlr":"20773","material":"FITA PARA VERIFICAÇÃO DE GLICEMIA ACTIVE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":295,"cod_bionexo":"178","cod_hlr":"178","material":"FITOMETADIONA – VITAMINA K 10MG/ML 1ML IM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":296,"cod_bionexo":"TEGAHVN","cod_hlr":"25000228","material":"FIXADOR CATETER ACESSO CENTRAL 8,9X11,5 (TEGADERM IV) REF 1655","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"PHARMAPLAST/PHARMAPORE","status":"normal","validade":null},{"id":297,"cod_bionexo":"HLR2351","cod_hlr":"25000227","material":"FIXADOR DE CATETER IV FIX 3M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":298,"cod_bionexo":"1961","cod_hlr":"1961","material":"FLUCONAZOL 150MG CAP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":299,"cod_bionexo":"28","cod_hlr":"28","material":"FLUCONAZOL 200MG/100ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":300,"cod_bionexo":"20754","cod_hlr":"20754","material":"FLUMAZENIL 0,1MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":301,"cod_bionexo":"90","cod_hlr":"90","material":"FLUOXETINA CLORIDRATO 20MG CAP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":302,"cod_bionexo":"HLR815","cod_hlr":"25958","material":"FORMOTEROL + BUDESONIDA (ALENIA) 12/400MCG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":303,"cod_bionexo":"26187","cod_hlr":"26187","material":"FOSFATO DE POTASSIO 2MEQ/ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":304,"cod_bionexo":"24050","cod_hlr":"24050","material":"FRALDA DESCARTÁVEL ADULTO GG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":305,"cod_bionexo":"20623","cod_hlr":"20623","material":"FRASCO DE DRENAGEM MEDISTINAL COM EXTENSÃO 2000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":306,"cod_bionexo":"300","cod_hlr":"300","material":"FUROSEMIDA 10MG/ML 2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":307,"cod_bionexo":"299","cod_hlr":"299","material":"FUROSEMIDA 40MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":308,"cod_bionexo":"25182","cod_hlr":"25182","material":"GAZE DE RAYON PIELSANA 7,5X15CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":309,"cod_bionexo":"20851","cod_hlr":"20851","material":"GAZE ESTERIL 10X10CM PACOTE COM 10 UN - BLOCO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":310,"cod_bionexo":"20730","cod_hlr":"20730","material":"GAZE ESTERIL 7,5X7,5CM 10 UN","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":311,"cod_bionexo":"HLR837","cod_hlr":"25000231","material":"GAZE HIDROFILICA TIPO QUEIJO 91X91 UND","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":312,"cod_bionexo":"HLR838","cod_hlr":"566","material":"GEL PARA ECOGRAFIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":313,"cod_bionexo":"32","cod_hlr":"32","material":"GENTAMICINA SULFATO 80MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":314,"cod_bionexo":"620","cod_hlr":"620","material":"GLIBENCLAMIDA 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":315,"cod_bionexo":"GHLR","cod_hlr":"25000226","material":"GLICINA 1,5% 3000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":316,"cod_bionexo":"HLR856","cod_hlr":"1874","material":"GLICOSE 10% 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":317,"cod_bionexo":"1876","cod_hlr":"1876","material":"GLICOSE 10% 250ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":318,"cod_bionexo":"544","cod_hlr":"544","material":"GLICOSE 5% 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":319,"cod_bionexo":"545","cod_hlr":"545","material":"GLICOSE 5% 250ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":320,"cod_bionexo":"546","cod_hlr":"546","material":"GLICOSE 5% 500ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":321,"cod_bionexo":"155","cod_hlr":"155","material":"GLICOSE HIPERTONICA 50% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":322,"cod_bionexo":"156","cod_hlr":"156","material":"GLUCONATO DE CALCIO 10% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":323,"cod_bionexo":"97","cod_hlr":"97","material":"HALOPERIDOL 2MG/ML FR 20ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":324,"cod_bionexo":"93","cod_hlr":"93","material":"HALOPERIDOL 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":325,"cod_bionexo":"96","cod_hlr":"96","material":"HALOPERIDOL 5MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":326,"cod_bionexo":"1957","cod_hlr":"1957","material":"HEPARINA 5.000UI/0,25ML SC AMP +","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":327,"cod_bionexo":"20633","cod_hlr":"20633","material":"HEPARINA 5000UI/ML FA 5ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":328,"cod_bionexo":"21353","cod_hlr":"25000229","material":"HIDRALAZINA 25MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":329,"cod_bionexo":"533","cod_hlr":"533","material":"HIDRALAZINA CLORIDRATO 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":330,"cod_bionexo":"1830","cod_hlr":"1830","material":"HIDROCLOROTIAZIDA 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":331,"cod_bionexo":"305","cod_hlr":"305","material":"HIDROCORTISONA SUCCINATO SODICO 100MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":332,"cod_bionexo":"306","cod_hlr":"306","material":"HIDROCORTISONA SUCCINATO SODICO 500MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":333,"cod_bionexo":"HLR113","cod_hlr":"","material":"HIDROFILME ROLO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":334,"cod_bionexo":"HLR7","cod_hlr":"25000232","material":"HIDROGEL PHMB 100GR TUBO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":335,"cod_bionexo":"20356","cod_hlr":"20356","material":"HIDROXIDO DE ALUMINIO FR 240ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":336,"cod_bionexo":"250845","cod_hlr":"1810","material":"IBUPROFENO 50mg/ml GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":337,"cod_bionexo":"CB2","cod_hlr":"25000233","material":"IMUNOGLOBULINA HUMANA ANTI RH 300MCG/2,0ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":338,"cod_bionexo":"273","cod_hlr":"273","material":"INSULINA NPH 100UI/ML 10ML FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":339,"cod_bionexo":"274","cod_hlr":"274","material":"INSULINA REGULAR 100UI/ML 10ML FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":340,"cod_bionexo":"HLR104","cod_hlr":"25001087","material":"Iodopolvidona 2,5%, colírio","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":341,"cod_bionexo":"613","cod_hlr":"613","material":"IPRATROPIO BROMETO 0,25MG/ML FR 20ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":342,"cod_bionexo":"NIPRO","cod_hlr":"25000235","material":"ISOLADOR DE PRESSAO PARA HEMODIALISE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":343,"cod_bionexo":"249","cod_hlr":"249","material":"ISOSSORBIDA DINITRATO 10MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":344,"cod_bionexo":"252","cod_hlr":"252","material":"ISOSSORBIDA DINITRATO 5MG SL COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":345,"cod_bionexo":"HRES 32","cod_hlr":"250","material":"ISOSSORBIDA MONONITRATO 20MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":346,"cod_bionexo":"270","cod_hlr":"270","material":"IVERMECTINA 6MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":347,"cod_bionexo":"HLR163","cod_hlr":"25000673","material":"KIT CIRURGICO DESCARTAVEL ESTERIL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":348,"cod_bionexo":"20711","cod_hlr":"20711","material":"KIT INTRODUTOR PARA MARCAPASSO 7FR.","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":349,"cod_bionexo":"HLR122","cod_hlr":"","material":"KIT TESTE COVID-19 ANTÍGENO HECIN","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":350,"cod_bionexo":"1452","cod_hlr":"1452","material":"LACTULOSE XAROPE 120ML FRS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":351,"cod_bionexo":"574","cod_hlr":"574","material":"LAMINA BISTURI 11","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":352,"cod_bionexo":"575","cod_hlr":"575","material":"LAMINA BISTURI 12","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":353,"cod_bionexo":"636363","cod_hlr":"576","material":"LAMINA BISTURI 15","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":354,"cod_bionexo":"577","cod_hlr":"577","material":"LAMINA BISTURI 20","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":355,"cod_bionexo":"HRES 58","cod_hlr":"573","material":"LAMINA BISTURI 22","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":356,"cod_bionexo":"20576","cod_hlr":"20576","material":"LANCETAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":357,"cod_bionexo":"HLR142","cod_hlr":"20467","material":"LEVOFLOXACINO 500MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":358,"cod_bionexo":"106","cod_hlr":"106","material":"LEVOMEPROMAZINA CLORIDRATO 40MG/ML FR 20ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":359,"cod_bionexo":"HRES 33","cod_hlr":"25000244","material":"LEVOTIROXINA (T4) 100MCG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":360,"cod_bionexo":"298","cod_hlr":"298","material":"LEVOTIROXINA (T4) 25MCG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":361,"cod_bionexo":"176","cod_hlr":"176","material":"LIDOCAINA + EPINEFRINA 2% COM VASO 20 ML FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":362,"cod_bionexo":"174","cod_hlr":"174","material":"LIDOCAINA 1% SEM VASO FA 20ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":363,"cod_bionexo":"175","cod_hlr":"175","material":"LIDOCAINA 10% SPRAY 50ML FRS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":364,"cod_bionexo":"177","cod_hlr":"177","material":"LIDOCAINA 2% SEM VASO FA 20ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":365,"cod_bionexo":"184","cod_hlr":"184","material":"LIDOCAINA 20MG/G GELEIA TB 30GR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":366,"cod_bionexo":"HLR407","cod_hlr":"25000238","material":"LIGACLIP LT 300 (CTU-03) COM 06 UNIDADES","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":367,"cod_bionexo":"622","cod_hlr":"622","material":"LOPERAMIDA 2MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":368,"cod_bionexo":"23184","cod_hlr":"23184","material":"LORATADINA 10MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":369,"cod_bionexo":"LORAHVN","cod_hlr":"25000246","material":"LORATADINA 5MG/5ML XPE 100ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":370,"cod_bionexo":"HLR103","cod_hlr":"107","material":"Lorazepam 2mg","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":371,"cod_bionexo":"20763","cod_hlr":"20763","material":"LOSARTANA 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":372,"cod_bionexo":"22825","cod_hlr":"20583","material":"LUVA DE NITRILO G","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":373,"cod_bionexo":"22813","cod_hlr":"256445","material":"LUVA DE NITRILO M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":374,"cod_bionexo":"21637","cod_hlr":"256444","material":"LUVA DE NITRILO P","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":375,"cod_bionexo":"2023","cod_hlr":"2023","material":"LUVA ESTERIL 6.5","pedido":null,"urgente":"","marcas_pad":"MUCAMBO","marcas_desq":"","status":"normal","validade":null},{"id":376,"cod_bionexo":"438","cod_hlr":"438","material":"LUVA ESTÉRIL 7,5","pedido":null,"urgente":"","marcas_pad":"MUCAMBO","marcas_desq":"","status":"normal","validade":null},{"id":377,"cod_bionexo":"2046","cod_hlr":"2046","material":"LUVA ESTÉRIL 7.0","pedido":null,"urgente":"","marcas_pad":"MUCAMBO","marcas_desq":"","status":"normal","validade":null},{"id":378,"cod_bionexo":"439","cod_hlr":"439","material":"LUVA ESTÉRIL 8,0","pedido":null,"urgente":"","marcas_pad":"MUCAMBO","marcas_desq":"","status":"normal","validade":null},{"id":379,"cod_bionexo":"440","cod_hlr":"440","material":"LUVA ESTÉRIL 8,5","pedido":null,"urgente":"","marcas_pad":"MUCAMBO","marcas_desq":"","status":"normal","validade":null},{"id":380,"cod_bionexo":"1415","cod_hlr":"1415","material":"LUVA GINECOLÓGICA PLÁSTICA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"MEDIX","status":"normal","validade":null},{"id":381,"cod_bionexo":"1602","cod_hlr":"1602","material":"MALHA TUBULAR 10CMX25M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":382,"cod_bionexo":"HLR1232","cod_hlr":"25000127","material":"MALHA TUBULAR 12CMX25M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":383,"cod_bionexo":"HLR1233","cod_hlr":"492","material":"MALHA TUBULAR 15CMX25M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":384,"cod_bionexo":"HLR1234","cod_hlr":"250150","material":"MALHA TUBULAR 4CM** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":385,"cod_bionexo":"HLR139","cod_hlr":"25000129","material":"MALHA TUBULAR 6CMX25M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":386,"cod_bionexo":"HLR1236","cod_hlr":"250242","material":"MALHA TUBULAR 8CM** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":387,"cod_bionexo":"536","cod_hlr":"536","material":"MANITOL 20% 250ML BOLSA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":388,"cod_bionexo":"HRES 15","cod_hlr":"25000248","material":"MEROPENEM 1g FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":389,"cod_bionexo":"temporario1","cod_hlr":"24926","material":"METADONA 10 MG, CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":390,"cod_bionexo":"25306","cod_hlr":"25306","material":"METADONA 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":391,"cod_bionexo":"24907","cod_hlr":"24907","material":"METARAMINOL 10MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":392,"cod_bionexo":"8890","cod_hlr":"8890","material":"METFORMINA 500MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":393,"cod_bionexo":"1411","cod_hlr":"1411","material":"METFORMINA 850MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":394,"cod_bionexo":"253","cod_hlr":"253","material":"METILDOPA 250MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":395,"cod_bionexo":"169","cod_hlr":"169","material":"METILERGOMETRINA 0,2MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":396,"cod_bionexo":"250220","cod_hlr":"25000252","material":"METILPREDNISOLONA 125MG AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":397,"cod_bionexo":"250167","cod_hlr":"25000350","material":"METILPREDNISOLONA 500MG AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":398,"cod_bionexo":"202","cod_hlr":"202","material":"METOCLOPRAMIDA CLORIDRATO 10MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":399,"cod_bionexo":"203","cod_hlr":"203","material":"METOCLOPRAMIDA CLORIDRATO 4MG/ML FR 10ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":400,"cod_bionexo":"201","cod_hlr":"201","material":"METOCLOPRAMIDA CLORIDRATO 5MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":401,"cod_bionexo":"2030","cod_hlr":"2030","material":"METOPROLOL 1MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":402,"cod_bionexo":"24643","cod_hlr":"25000240","material":"METOPROLOL TARTARATO 100MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":403,"cod_bionexo":"2002","cod_hlr":"2002","material":"METRONIDAZOL 250MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":404,"cod_bionexo":"35","cod_hlr":"35","material":"METRONIDAZOL 500MG/100ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":405,"cod_bionexo":"HLR141","cod_hlr":"24595","material":"METRONIDAZOL CREME","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":406,"cod_bionexo":"109","cod_hlr":"109","material":"MIDAZOLAM 15MG/3ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":407,"cod_bionexo":"20561","cod_hlr":"20561","material":"MIDAZOLAM 50MG/10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":408,"cod_bionexo":"CB4","cod_hlr":"25000241","material":"MISOPROSTOL 200MCG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":409,"cod_bionexo":"CB5","cod_hlr":"25000243","material":"MISOPROSTOL 25MCG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":410,"cod_bionexo":"250740","cod_hlr":"25000245","material":"MORFINA 0,2MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":411,"cod_bionexo":"164","cod_hlr":"164","material":"MORFINA SULFATO 10MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":412,"cod_bionexo":"20618","cod_hlr":"20618","material":"NALOXONA 0,4MG/ML 1ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":413,"cod_bionexo":"1927","cod_hlr":"1927","material":"NEOMICINA 5MG/G+BACITRACINA 250UI/G POMADA TB 10GR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":414,"cod_bionexo":"170","cod_hlr":"170","material":"NEOSTIGMINA 0,5MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":415,"cod_bionexo":"HLR2573","cod_hlr":"20989","material":"NICOTINA 21MG ADESIVO (LIBERAÇÃO PROLONGADA 24H)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":416,"cod_bionexo":"234","cod_hlr":"234","material":"NIFEDIPINA 10MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":417,"cod_bionexo":"1625","cod_hlr":"1625","material":"NIMODIPINO 30MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":418,"cod_bionexo":"1909","cod_hlr":"1909","material":"NISTATINA 100.000UI/ML SUSPENSAO FR 50ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":419,"cod_bionexo":"126","cod_hlr":"126","material":"NISTATINA 25.000UI/G TB 60GR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":420,"cod_bionexo":"HLR1322","cod_hlr":"25000249","material":"NITRATO DE PRATA 1% 5ML COLIRIO FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":421,"cod_bionexo":"21348","cod_hlr":"21348","material":"NITROFURANTOINA 100MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":422,"cod_bionexo":"20636","cod_hlr":"20636","material":"NITROGLICERINA 5MG/ML 5ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":423,"cod_bionexo":"217","cod_hlr":"217","material":"NITROPRUSSETO DE SODIO 50MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":424,"cod_bionexo":"1849","cod_hlr":"25000251","material":"NORADRENALINA 2MG/ML 4ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":425,"cod_bionexo":"36","cod_hlr":"36","material":"NORFLORXACINO 400MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":426,"cod_bionexo":"179","cod_hlr":"179","material":"OCITOCINA 5UI/ML SOL INJ AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":427,"cod_bionexo":"261","cod_hlr":"261","material":"OLEO MINERAL FR 100ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":428,"cod_bionexo":"204","cod_hlr":"204","material":"OMEPRAZOL 20MG CAP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":429,"cod_bionexo":"205","cod_hlr":"205","material":"OMEPRAZOL 40MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":430,"cod_bionexo":"22322","cod_hlr":"20790","material":"ONDANSETRONA 4MG/2ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":431,"cod_bionexo":"37","cod_hlr":"37","material":"OXACILINA SODICA 500MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":432,"cod_bionexo":"134","cod_hlr":"134","material":"OXIDO ZINCO+BORICO+VIT A+VIT D POMADA TB","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":433,"cod_bionexo":"HLR98","cod_hlr":"25000242","material":"OXIMETAZOLINA 0,5% SOL NASAL ADULTO 30ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":434,"cod_bionexo":"HLR2488","cod_hlr":"25000194","material":"PACOTE COMPRESSA CAMPO OPERATÓRIO NÃO ESTÉRIL 45X50CM 50 UNI item cme","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":435,"cod_bionexo":"442","cod_hlr":"442","material":"PACOTE GAZE / 10X10 500 UNIDADES","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":436,"cod_bionexo":"HLR1371","cod_hlr":"25000247","material":"PAPAINA 12% CREME 100G POTE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":437,"cod_bionexo":"52","cod_hlr":"52","material":"PARACETAMOL 200MG/ML FR 15ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":438,"cod_bionexo":"HLR1398","cod_hlr":"20746","material":"PARACETAMOL 750MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":439,"cod_bionexo":"HLR99","cod_hlr":"2500587","material":"PERMETRINA 1% SOLUCAO CAPILAR FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":440,"cod_bionexo":"20632","cod_hlr":"20632","material":"PIPERACICLINA 4G+TAZOBACTAM 500MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":441,"cod_bionexo":"1413","cod_hlr":"1413","material":"PIRIMETAMINA 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":442,"cod_bionexo":"HLR1437","cod_hlr":"25000136","material":"PLACA-TERRA DESCARTAVEL ADULTO/PEDIATRICA WR21","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"BLAYCO","status":"normal","validade":null},{"id":443,"cod_bionexo":"HLR160","cod_hlr":"","material":"POLIDOCANOL 0,5% 2ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":444,"cod_bionexo":"MP1","cod_hlr":"25000254","material":"POLIDOCANOL 1% 2ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":445,"cod_bionexo":"MP2","cod_hlr":"25000256","material":"POLIDOCANOL 3% 2ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":446,"cod_bionexo":"24089","cod_hlr":"24089","material":"POLIESTIRENOSSULFONATO DE CÁLCIO 900MG/G SACHE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":447,"cod_bionexo":"20750","cod_hlr":"20750","material":"POLIMIXINA B SULFATO 500.000UI TB","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":448,"cod_bionexo":"250823","cod_hlr":"251000","material":"PREDNISOLONA 3MG/ML SOL ORAL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":449,"cod_bionexo":"307","cod_hlr":"307","material":"PREDNISONA 20MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":450,"cod_bionexo":"21728","cod_hlr":"21728","material":"PREDNISONA 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":451,"cod_bionexo":"20548","cod_hlr":"20548","material":"PRESERVATIVO NÃO LUBRIFICADO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":452,"cod_bionexo":"301","cod_hlr":"301","material":"PROMETAZINA CLORIDRATO 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":453,"cod_bionexo":"302","cod_hlr":"302","material":"PROMETAZINA CLORIDRATO 25MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":454,"cod_bionexo":"11825886","cod_hlr":"25000117","material":"PROPATILNITRATO 10MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":455,"cod_bionexo":"191","cod_hlr":"191","material":"PROPOFOL 10MG/ML 20ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":456,"cod_bionexo":"257","cod_hlr":"257","material":"PROPRANOLOL CLORIDRATO 40MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":457,"cod_bionexo":"HL134","cod_hlr":"24908","material":"PROTAMINA 100UI/ML 5ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":458,"cod_bionexo":"HLR15","cod_hlr":"25000140","material":"PROTETOR OCULAR P/ FOTOTERAPIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":459,"cod_bionexo":"CB6","cod_hlr":"25000142","material":"PULSEIRA RN AZUL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":460,"cod_bionexo":"CB7","cod_hlr":"25000144","material":"PULSEIRA RN ROSA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":461,"cod_bionexo":"25957","cod_hlr":"25957","material":"QUETIAPINA 25MG cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":462,"cod_bionexo":"HLR1005","cod_hlr":"20715","material":"RIFAMICINA SPRAY 20ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":463,"cod_bionexo":"1829","cod_hlr":"1829","material":"RISPERIDONA 1MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":464,"cod_bionexo":"23949","cod_hlr":"23949","material":"RIVAROXABANA 15 MG, CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":465,"cod_bionexo":"10378774","cod_hlr":"249640","material":"ROCURONIO 10MG/ML 5ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":466,"cod_bionexo":"23312","cod_hlr":"23312","material":"ROPIVACAINA 7,5MG 20ML FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":467,"cod_bionexo":"HLR1089","cod_hlr":"25000257","material":"SACARATO HIDROXIDO FERRICO (NORIPURUM) EV 100MG/5ML INJ.","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":468,"cod_bionexo":"HLR1091","cod_hlr":"25000258","material":"SACCHAROMYCES BOULARDI PED 200MG ENV","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":469,"cod_bionexo":"HLR114","cod_hlr":"25001108","material":"SAFGEL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":470,"cod_bionexo":"23186","cod_hlr":"23186","material":"SALBUTAMOL 100MCG/DOSE SPRAY","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":471,"cod_bionexo":"HRES 37","cod_hlr":"25000259","material":"SALBUTAMOL P/ NEBULIZACAO 5MG/ML 10ML GOTAS FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":472,"cod_bionexo":"309","cod_hlr":"1098","material":"SERINGA 10 ML COM BICO CENTRAL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":473,"cod_bionexo":"310","cod_hlr":"101","material":"SERINGA 1ML COM AGULHA 13X4,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":474,"cod_bionexo":"1485","cod_hlr":"99","material":"SERINGA 20 ML COM BICO CENTRAL LUER SLIP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":475,"cod_bionexo":"312","cod_hlr":"1096","material":"SERINGA 3 ML COM BICO CENTRAL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":476,"cod_bionexo":"314","cod_hlr":"1097","material":"SERINGA 5 ML COM BICO CENTRAL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":477,"cod_bionexo":"20190","cod_hlr":"20190","material":"SERINGA 60ML COM BICO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":478,"cod_bionexo":"24282","cod_hlr":"24282","material":"SERINGA 60ML LUER LOCK (BICO ROSCA)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":479,"cod_bionexo":"HRES 18","cod_hlr":"25000145","material":"SERINGA DESCARTAVEL 3ML CONEXAO LUER LOCK","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":480,"cod_bionexo":"HRES 17","cod_hlr":"25000146","material":"SERINGA DESCARTAVEL 5ML CONEXAO LUER LOCK","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":481,"cod_bionexo":"HRES 16","cod_hlr":"25000864","material":"SERINGA DESCARTAVEL LUER LOOK 10ML (BICO ROSCA)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":482,"cod_bionexo":"163","cod_hlr":"163","material":"SERTRALINA CLORIDRATO 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":483,"cod_bionexo":"HLR1135","cod_hlr":"25689","material":"SEVOFLURANO 250ML ++","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":484,"cod_bionexo":"137","cod_hlr":"137","material":"SIMETICONA (DIMETICONA) 75MG/ML FR 10ML GOTAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":485,"cod_bionexo":"HRES 108","cod_hlr":"25000261","material":"SIMETICONA 40MG COMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":486,"cod_bionexo":"287","cod_hlr":"287","material":"SINVASTATINA 20MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":487,"cod_bionexo":"NIPRO","cod_hlr":"25000267","material":"SOLUÇÃO ACIDA P/ HEMODIALISE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":488,"cod_bionexo":"NIPRO","cod_hlr":"25000268","material":"SOLUÇÃO BASICA P/ HEMODIALISE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":489,"cod_bionexo":"25907","cod_hlr":"25000253","material":"SOLUÇÃO DE RINGER COM LACTATO FR 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":490,"cod_bionexo":"537","cod_hlr":"537","material":"SOLUÇÃO DE RINGER COM LACTATO FR 500ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":491,"cod_bionexo":"542","cod_hlr":"542","material":"SOLUÇÃO GLICOFISIOLÓGICA 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":492,"cod_bionexo":"HLR1143","cod_hlr":"25000269","material":"SOLUCAO NASAL INFANTIL (SORINE) FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":493,"cod_bionexo":"HLR121","cod_hlr":"25000150","material":"SONDA ASP. TRAQUEAL SISTEMA FECHADO COM CONEXAO N 16 52CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":494,"cod_bionexo":"454","cod_hlr":"454","material":"SONDA ASPIRACAO TRAQUEAL N.18","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":495,"cod_bionexo":"457","cod_hlr":"457","material":"SONDA ASPIRACAO TRAQUEAL N.8","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":496,"cod_bionexo":"455","cod_hlr":"455","material":"SONDA DE ASPIRACAO TRAQUEAL 04*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":497,"cod_bionexo":"456","cod_hlr":"456","material":"SONDA DE ASPIRACAO TRAQUEAL 06*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":498,"cod_bionexo":"448","cod_hlr":"448","material":"SONDA DE ASPIRAÇÃO TRAQUEAL 10*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":499,"cod_bionexo":"449","cod_hlr":"449","material":"SONDA DE ASPIRAÇÃO TRAQUEAL 12","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":500,"cod_bionexo":"450","cod_hlr":"450","material":"SONDA DE ASPIRAÇÃO TRAQUEAL 14","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":501,"cod_bionexo":"451","cod_hlr":"451","material":"SONDA DE ASPIRAÇÃO TRAQUEAL 16","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":502,"cod_bionexo":"20984","cod_hlr":"20984","material":"SONDA DE GASTROTOMIA 20FR/20CC - BLOCO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":503,"cod_bionexo":"20985","cod_hlr":"20985","material":"SONDA DE GASTROTOMIA 24FR/20CC - BLOCO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":504,"cod_bionexo":"484","cod_hlr":"484","material":"SONDA EM T (KEHR) 14 FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":505,"cod_bionexo":"HLR137","cod_hlr":"485","material":"SONDA EM T (KEHR) 16 FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":506,"cod_bionexo":"25782","cod_hlr":"25782","material":"SONDA FOLEY 08 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":507,"cod_bionexo":"22226","cod_hlr":"22226","material":"SONDA FOLEY 10 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":508,"cod_bionexo":"458","cod_hlr":"458","material":"SONDA FOLEY 12 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":509,"cod_bionexo":"459","cod_hlr":"459","material":"SONDA FOLEY 14 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":510,"cod_bionexo":"460","cod_hlr":"460","material":"SONDA FOLEY 16 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":511,"cod_bionexo":"462","cod_hlr":"462","material":"SONDA FOLEY 18 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":512,"cod_bionexo":"464","cod_hlr":"464","material":"SONDA FOLEY 20 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":513,"cod_bionexo":"20854","cod_hlr":"20854","material":"SONDA FOLEY 22 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":514,"cod_bionexo":"20541","cod_hlr":"20541","material":"SONDA FOLEY 24 2 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":515,"cod_bionexo":"461","cod_hlr":"461","material":"SONDA FOLEY Nº16 3 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":516,"cod_bionexo":"463","cod_hlr":"463","material":"SONDA FOLEY Nº18 3 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":517,"cod_bionexo":"465","cod_hlr":"465","material":"SONDA FOLEY Nº20 3 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":518,"cod_bionexo":"1777","cod_hlr":"1777","material":"SONDA FOLEY Nº22 3 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":519,"cod_bionexo":"1843","cod_hlr":"1843","material":"SONDA FOLEY Nº24 3 VIAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":520,"cod_bionexo":"20424","cod_hlr":"20424","material":"SONDA NASO LONGA N.10","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":521,"cod_bionexo":"24974","cod_hlr":"24974","material":"SONDA NASO LONGA N.6","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":522,"cod_bionexo":"","cod_hlr":"256180","material":"SONDA NASOENTERAL NEO N.6 60CM (REF. 5001)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":523,"cod_bionexo":"24525","cod_hlr":"24525","material":"SONDA NASOENTERICA 08FR 60 CM*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":524,"cod_bionexo":"20622","cod_hlr":"20622","material":"SONDA NASOENTERICA 12FR 120CM ** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"EMBRAMED","status":"normal","validade":null},{"id":525,"cod_bionexo":"474","cod_hlr":"474","material":"SONDA NASOGASTRICA 08LONGA*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":526,"cod_bionexo":"475","cod_hlr":"475","material":"SONDA NASOGASTRICA 12 LONGA *** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":527,"cod_bionexo":"468","cod_hlr":"468","material":"SONDA NASOGÁSTRICA 14LONGA*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":528,"cod_bionexo":"469","cod_hlr":"469","material":"SONDA NASOGÁSTRICA 16 LONGA*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":529,"cod_bionexo":"470","cod_hlr":"470","material":"SONDA NASOGÁSTRICA 18 LONGA*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":530,"cod_bionexo":"471","cod_hlr":"471","material":"SONDA NASOGÁSTRICA 20 LONGA*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":531,"cod_bionexo":"HLR1177","cod_hlr":"25000160","material":"SONDA NASOGASTRICA N6 CURTA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":532,"cod_bionexo":"147262","cod_hlr":"250228","material":"SONDA NASOGASTRICA N8 CURTA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":533,"cod_bionexo":"23443","cod_hlr":"23443","material":"SONDA SISTEMA FECHADO ASPIRAÇÃO 12*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":534,"cod_bionexo":"23445","cod_hlr":"23445","material":"SONDA SISTEMA FECHADO ASPIRAÇÃO 14*** contar+ interno","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":535,"cod_bionexo":"HRES 84","cod_hlr":"249949","material":"SONDA URETRAL N. 4","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":536,"cod_bionexo":"2011","cod_hlr":"2011","material":"SONDA URETRAL N. 6","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":537,"cod_bionexo":"478","cod_hlr":"478","material":"SONDA URETRAL N.10*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":538,"cod_bionexo":"479","cod_hlr":"479","material":"SONDA URETRAL N.12*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":539,"cod_bionexo":"480","cod_hlr":"480","material":"SONDA URETRAL N.14*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":540,"cod_bionexo":"HLR8","cod_hlr":"25000164","material":"SONDA URETRAL N.20","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":541,"cod_bionexo":"483","cod_hlr":"483","material":"SONDA URETRAL N.8*","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":542,"cod_bionexo":"24392","cod_hlr":"24392","material":"SORO DE REIDRATACAO ORAL EM PO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":543,"cod_bionexo":"538","cod_hlr":"538","material":"SORO FISIOLÓGICO 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":544,"cod_bionexo":"20401","cod_hlr":"20401","material":"SORO FISIOLÓGICO 100ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":545,"cod_bionexo":"540","cod_hlr":"540","material":"SORO FISIOLÓGICO 250ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":546,"cod_bionexo":"541","cod_hlr":"541","material":"SORO FISIOLÓGICO 500ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":547,"cod_bionexo":"HRES 50","cod_hlr":"25000239","material":"SUCCINATO METOPROLOL 25MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":548,"cod_bionexo":"39","cod_hlr":"39","material":"SULFADIAZINA 500MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":549,"cod_bionexo":"132","cod_hlr":"132","material":"SULFADIAZINA DE PRATA 1% POMADA TB 50GR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":550,"cod_bionexo":"HLR57","cod_hlr":"24527","material":"SULFAMETOXAZOL + TRIMETOPRIMA 200MG +40MG/5ML -100ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":551,"cod_bionexo":"12","cod_hlr":"12","material":"SULFAMETOXAZOL 400MG + TRIMETOPRIMA 80MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":552,"cod_bionexo":"876","cod_hlr":"876","material":"SULFATO DE BARIO SUSP ORAL FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":553,"cod_bionexo":"157","cod_hlr":"157","material":"SULFATO DE MAGNÉSIO 50% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":554,"cod_bionexo":"HLR101","cod_hlr":"26039","material":"SULFATO FERROSO 125MG/ML GOTAS 30ML FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":555,"cod_bionexo":"206","cod_hlr":"206","material":"SULFATO FERROSO CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":556,"cod_bionexo":"HRES 119","cod_hlr":"25000255","material":"SUPOSITORIO DE GLICERINA INF UN","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":557,"cod_bionexo":"HLR76","cod_hlr":"25001015","material":"SURFACTANTE 240 MG, AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":558,"cod_bionexo":"181","cod_hlr":"181","material":"SUXAMETONIO 100MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":559,"cod_bionexo":"430","cod_hlr":"25000167","material":"T DE AYRE PLASTICO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":560,"cod_bionexo":"CB1","cod_hlr":"20968","material":"TALA METÁLICA (ZIMMER) P/ IMOBILIZAÇÃO 16X250MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":561,"cod_bionexo":"HLR2572","cod_hlr":"250270","material":"TAMPA LUER MACHO/FEMEA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":562,"cod_bionexo":"HLR1540","cod_hlr":"25000171","material":"TELA DE PROLIPROPILENO 10X10","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":563,"cod_bionexo":"11850422","cod_hlr":"25000173","material":"TELA INORGANICA (MARLEX) 15X15 cm","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":564,"cod_bionexo":"HLR64","cod_hlr":"25000118","material":"TELA INORGANICA (MARLEX) 30X30CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":565,"cod_bionexo":"11750124","cod_hlr":"25000172","material":"TELA INORGANICA MARLEX 10X15","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":566,"cod_bionexo":"626","cod_hlr":"626","material":"TERBUTALINA SULFATO 0,5MG/ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":567,"cod_bionexo":"249551","cod_hlr":"","material":"TESTE COVID + INFLUENZA ACRO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":568,"cod_bionexo":"26159","cod_hlr":"26159","material":"TIAMINA (VIT B1) 300MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":569,"cod_bionexo":"431","cod_hlr":"431","material":"TORNEIRINHA 3 VIAS (danula) luer slip (bico)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"EMBRAMED e MARKMED","status":"normal","validade":null},{"id":570,"cod_bionexo":"HLR78","cod_hlr":"","material":"TORNEIRINHA DESCARTAVEL 3 VIAS LUER LOCK – ROSCA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"EMBRAMED E MARKMED","status":"normal","validade":null},{"id":571,"cod_bionexo":"1634","cod_hlr":"1634","material":"TRAMADOL CLORIDRATO 100MG/2ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":572,"cod_bionexo":"76","cod_hlr":"76","material":"TRAMADOL CLORIDRATO 50MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":573,"cod_bionexo":"ALIVE","cod_hlr":"249803","material":"TRANSDUTOR DE PRESSÃO (P/ HEMODIÁLISE) GABMED TP0971","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":574,"cod_bionexo":"HRES 102","cod_hlr":"25754","material":"TUBO / CANULA TRAQUEOSTOMIA 6 COM BALAO SILICONE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":575,"cod_bionexo":"327","cod_hlr":"327","material":"TUBO / CANULA TRAQUEOSTOMIA 7,0 COM BALAO SILICONE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":576,"cod_bionexo":"328","cod_hlr":"328","material":"TUBO / CANULA TRAQUEOSTOMIA 7,5 COM BALAO SILICONE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":577,"cod_bionexo":"329","cod_hlr":"329","material":"TUBO / CANULA TRAQUEOSTOMIA 8,0 COM BALAO SILICONE","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":578,"cod_bionexo":"10889446","cod_hlr":"249876","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 3,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":579,"cod_bionexo":"250857","cod_hlr":"249877","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 3,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":580,"cod_bionexo":"407","cod_hlr":"407","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 4,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":581,"cod_bionexo":"409","cod_hlr":"409","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 5,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":582,"cod_bionexo":"1823","cod_hlr":"1823","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 6,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":583,"cod_bionexo":"1824","cod_hlr":"1824","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 6,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":584,"cod_bionexo":"410","cod_hlr":"410","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 7,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":585,"cod_bionexo":"411","cod_hlr":"411","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 7,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":586,"cod_bionexo":"412","cod_hlr":"412","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 8,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":587,"cod_bionexo":"413","cod_hlr":"413","material":"TUBO ENDOTRAQUEAL COM BALÃO Nº 8,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":588,"cod_bionexo":"414","cod_hlr":"414","material":"TUBO ENDOTRAQUEAL COM BALAO Nº 9,0","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":589,"cod_bionexo":"408","cod_hlr":"408","material":"TUBO ENDOTRAQUEAL DESC. COM BALAO N4,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":590,"cod_bionexo":"1822","cod_hlr":"1822","material":"TUBO ENDOTRAQUEAL DESC. COM BALAO N5,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":591,"cod_bionexo":"405","cod_hlr":"405","material":"TUBO ENDOTRAQUEAL DESC. SEM BALAO N2,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":592,"cod_bionexo":"21982","cod_hlr":"21982","material":"TUBO ENDOTRAQUEAL DESC. SEM BALAO N3,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":593,"cod_bionexo":"21984","cod_hlr":"21984","material":"TUBO ENDOTRAQUEAL SEM BALAO Nº 2","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":594,"cod_bionexo":"406","cod_hlr":"406","material":"TUBO ENDOTRAQUEAL SEM BALAO Nº 3","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":595,"cod_bionexo":"25479","cod_hlr":"25479","material":"TUBO ENDOTRAQUEAL SEM BALAO Nº 4","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":596,"cod_bionexo":"24593","cod_hlr":"24593","material":"TUBO ENDOTRAQUEAL SEM BALAO Nº 4,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":597,"cod_bionexo":"250858","cod_hlr":"25000187","material":"TUBO ENDOTRAQUEAL SEM BALAO Nº 5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":598,"cod_bionexo":"250862","cod_hlr":"25000189","material":"TUBO ENDOTRAQUEAL SEM BALAO Nº 5,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":599,"cod_bionexo":"42","cod_hlr":"42","material":"VANCOMICINA CLORIDRATO 500MG FA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":600,"cod_bionexo":"20451","cod_hlr":"20451","material":"VARFARINA 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":601,"cod_bionexo":"HRES 109","cod_hlr":"25101","material":"VASOPRESSINA 20U/ML 1ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":602,"cod_bionexo":"HLR102","cod_hlr":"20170","material":"Venlafaxina 75mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":603,"cod_bionexo":"221","cod_hlr":"221","material":"VERAPAMIL CLORIDRATO 80MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":604,"cod_bionexo":"HLRPO","cod_hlr":"25000265","material":"VIT A+AA+CLORANFENICOL+METIONINA POM OFT 3,5G TB (EPITEZAN)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":605,"cod_bionexo":"HLR88","cod_hlr":"20478","material":"VIT B1+B6+B12 CITONEURIM 5000MCG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":606,"cod_bionexo":"HLR58","cod_hlr":"25000266","material":"VITAMINA C (ACIDO ASCORBICO) 500MG/5ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":607,"cod_bionexo":"154","cod_hlr":"154","material":"VITAMINA COMPLEXO B DRG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":608,"cod_bionexo":"153","cod_hlr":"153","material":"VITAMINAS COMPLEXO B (POLIVITAMINICO) SOL INJ AMP 2ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":609,"cod_bionexo":"IGMED","cod_hlr":"","material":"KIT SISTEMA DE LIGADURA DE VARIZES ESOFAGICAS","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":610,"cod_bionexo":"MA HOSP","cod_hlr":"","material":"CPAP M","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":611,"cod_bionexo":"MA HOSP","cod_hlr":"","material":"CPAP P","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":612,"cod_bionexo":"MA HOSP","cod_hlr":"","material":"CPAP G","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":613,"cod_bionexo":"HLR1593","cod_hlr":"","material":"CARBEGOLINA 0,5 MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":614,"cod_bionexo":"MR UROLITO","cod_hlr":"","material":"KIT NEFROSTOMIA PERCUTANEA 12 FR","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":615,"cod_bionexo":"MR UROLITO","cod_hlr":"","material":"CATETER URETRAL 6.0 FRX70CM PONTA ABERTA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":616,"cod_bionexo":"363","cod_hlr":"","material":"VASELINA LIQUIDA 1000ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":617,"cod_bionexo":"250180","cod_hlr":"","material":"DOMPERIDONA 10MG, CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":618,"cod_bionexo":"ALIVE","cod_hlr":"","material":"CATETER MONO LUMEN INFANTIL 22GAX10CM","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":619,"cod_bionexo":"MULTIRAD","cod_hlr":"","material":"CONTRASTE IODADO 100ML - TOMOGRAFIA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":620,"cod_bionexo":"11142300","cod_hlr":"2500108","material":"OLANZAPINA 5MG CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":621,"cod_bionexo":"WHITE","cod_hlr":"","material":"CANULA DE ALTO FLUXO PEDIATRICA/NEONATAL PF","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":622,"cod_bionexo":"7845","cod_hlr":"","material":"MANTA DE AQUECIMENTO CORPO INTEIRO - 3M™ Bair Hugger™ 30000","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":623,"cod_bionexo":"HLR213","cod_hlr":"","material":"Sonda de Aspiração traqueal – sistema fehcado infantil nº 6","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":624,"cod_bionexo":"HRES 70","cod_hlr":"","material":"Sonda Foley 2 Vias 6Fr Com Balão","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":625,"cod_bionexo":"HRES 10","cod_hlr":"","material":"HIDRALAZINA 20 MG/ML, 1 ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":626,"cod_bionexo":"","cod_hlr":"","material":"OSELTAMIR 75MG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":627,"cod_bionexo":"","cod_hlr":"256363","material":"SONDA FOLEY 2 VIAS N6","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":628,"cod_bionexo":"","cod_hlr":"256377","material":"SONDA ASP. TRAQUEAL SISTEMA FECHADO COM CONEXAO N06 INFANTIL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":629,"cod_bionexo":"HLR311","cod_hlr":"256412","material":"CATETER MONO LUMEN INFANTIL 3FRX100CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":630,"cod_bionexo":"","cod_hlr":"256413","material":"CATETER MONO LUMEN INFANTIL 4FRX20CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":631,"cod_bionexo":"HLR91","cod_hlr":"256411","material":"CATETER PICC 1,9FRX30CM MONO LUMEN","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":632,"cod_bionexo":"HLR308","cod_hlr":"256410","material":"CATETER PICC 3FRX60CM MONO LUMEN","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":633,"cod_bionexo":"HLR118","cod_hlr":"25001111","material":"CURATIVO AQUACEL SEM PRATA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":634,"cod_bionexo":"HLR331","cod_hlr":"","material":"CATETER MONO LUMEN INFANTIL 5FRX20CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":635,"cod_bionexo":"HLR80","cod_hlr":"","material":"CATETER DUPLO CURVA EM J 12FRX15 CM HEMODIÁLISE *UTI* (SHILLEY)","pedido":null,"urgente":"","marcas_pad":"ACORDO ALIVE","marcas_desq":"","status":"normal","validade":null},{"id":636,"cod_bionexo":"20503","cod_hlr":"","material":"CETAMINA 500MG/10ML AMPOLA","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":637,"cod_bionexo":"23812","cod_hlr":"","material":"AVENTAL CIRURGICO ESTERIL AZUL TAM EG","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":638,"cod_bionexo":"HLR354","cod_hlr":"","material":"CANULA TRAQUEOSTOMIA EM PVC SEM BALÃO Nº 6,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":639,"cod_bionexo":"HLR355","cod_hlr":"","material":"CANULA TRAQUEOSTOMIA EM PVC SEM BALÃO Nº 7,5","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":640,"cod_bionexo":"HLR325","cod_hlr":"256077","material":"AGULHA BIOPSIA OSSEA PONTA JAMISHIDI 8G X 15CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":641,"cod_bionexo":"HLR326","cod_hlr":"256078","material":"AGULHA PARA BIOPSIA DE MEDULA OSSEA 16G X 10CM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":642,"cod_bionexo":"HLR327","cod_hlr":"","material":"FIO CERCALAGEM 1,5MM","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":643,"cod_bionexo":"HLR400","cod_hlr":"256370","material":"SULFATO DE MAGNÉSIO 10% 10ML AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":644,"cod_bionexo":"GASTROCOM","cod_hlr":"108484","material":"Agulha de esclerose Calibre 23 e 230cm","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":645,"cod_bionexo":"GASTROCOM","cod_hlr":"108485","material":"PINÇA PARA POLIPECTOMIA CORPO ESTRANHO 10 MM ( DESCARTAVEL )","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":646,"cod_bionexo":"GASTROCOM","cod_hlr":"108503","material":"PINÇA PARA POLIPECTOMIA CORPO ESTRANHO 15 MM ( DESCARTAVEL )","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":647,"cod_bionexo":"GASTROCOM","cod_hlr":"108487","material":"COLETOR DE POLIPO ( DESCARTAVEL )","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":648,"cod_bionexo":"GASTROCOM","cod_hlr":"108489","material":"PINÇA DE CORPO ESTRANHO RAPTUR 8 MM ( DESCARTAVEL )","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":649,"cod_bionexo":"GASTROCOM","cod_hlr":"108488","material":"PINÇA DE CORPO ESTRANHO JACARE 9 MM ( DESCARTAVEL )","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":650,"cod_bionexo":"HLR334","cod_hlr":"","material":"Clip de hemostasia 230cm","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":651,"cod_bionexo":"11385719","cod_hlr":"250295","material":"LINEZOLIDA 2MG/ML 300ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":652,"cod_bionexo":"1538","cod_hlr":"","material":"LUVA DE PROCEDIMENTO GRANDE C/ 100 UNIDADES","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":653,"cod_bionexo":"HRES 126","cod_hlr":"249651","material":"Tiamina EV","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":654,"cod_bionexo":"HLR341","cod_hlr":"108602","material":"Apixabana 2,5 mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":655,"cod_bionexo":"IGMED","cod_hlr":"","material":"PINÇA PARA POLIPECTOMIA CORPO ESTRANHO QUENTE E FRIA 3 TAMANHOS( DESCARTAVEL )","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":656,"cod_bionexo":"HLR67","cod_hlr":"108496","material":"Álcool Swab","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":657,"cod_bionexo":"20907","cod_hlr":"20907","material":"CLORETO DE SÓDIO 0,9%, 10 mL","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":658,"cod_bionexo":"","cod_hlr":"","material":"MERSILENE 2-0 G704T","pedido":null,"urgente":"PROC. FISTULA BC","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":659,"cod_bionexo":"","cod_hlr":"","material":"MERSILENE 3-0 SMV73T","pedido":null,"urgente":"PROC. FISTULA BC","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":660,"cod_bionexo":"","cod_hlr":"","material":"SISLATIC/VESSEL LOOP MINI AZUL","pedido":null,"urgente":"PROC. FISTULA BC","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":661,"cod_bionexo":"","cod_hlr":"","material":"SISLATIC/VESSEL LOOP MINI VERMELHO","pedido":null,"urgente":"PROC. FISTULA BC","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":662,"cod_bionexo":"","cod_hlr":"","material":"PROLENE 6-0 M8706T","pedido":null,"urgente":"PROC. FISTULA BC","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":663,"cod_bionexo":"","cod_hlr":"","material":"PROLENE 7-0 M8702T","pedido":null,"urgente":"PROC. FISTULA BC","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":664,"cod_bionexo":"HLR342","cod_hlr":"","material":"Apixabana 5 mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":665,"cod_bionexo":"HLRPO","cod_hlr":"25000265","material":"VIT A+AA+CLORANFENICOL+METIONINA POM OFT 3,5G TB (EPITEZAN)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":666,"cod_bionexo":"HLR102","cod_hlr":"20170","material":"Venlafaxina 75mg, cp","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":667,"cod_bionexo":"HLR103","cod_hlr":"107","material":"Lorazepam 2mg","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":668,"cod_bionexo":"HLR119","cod_hlr":"25000130","material":"AGULHA RAQUI ANESTESIA PARA OBESO 27G X 4 REF 408395","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":669,"cod_bionexo":"","cod_hlr":"","material":"HIDROFILME ROLO","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":670,"cod_bionexo":"23472","cod_hlr":"25001111","material":"HIDROFIBRA SIMPLES (ALGINATO DE CALCIO)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":671,"cod_bionexo":"","cod_hlr":"25001146","material":"HIDRALAZINA 20 MG/ML, 1 ML","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":672,"cod_bionexo":"HLR160","cod_hlr":"2500119","material":"POLIDOCANOL 0,5%","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":673,"cod_bionexo":"HRES 16","cod_hlr":"25000864","material":"SERINGA DESCARTAVEL 10ML CONEXAO LUER LOCK (BICO ROSCA)","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":674,"cod_bionexo":"HLR110","cod_hlr":"","material":"LIDOCAINA GELEIA 10G","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":675,"cod_bionexo":"HLR111","cod_hlr":"","material":"ESOMEPRAZOL 40 MG, AMP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null},{"id":676,"cod_bionexo":"HLR124","cod_hlr":"","material":"Ácido Ursodesoxicólico 50 MG, CP","pedido":null,"urgente":"","marcas_pad":"","marcas_desq":"","status":"normal","validade":null}];
 const ENTREGAS_RAW = [];
@@ -5021,10 +5299,7 @@ function showLoading(msg='Carregando...'){
 function hideLoading(){ document.getElementById('loadingOverlay').style.display='none'; }
 
 // ── LOCAL FALLBACK USERS (funciona sem internet) ──────────────────────────────
-const LOCAL_USERS = [
-  {id:'creator',name:'Administrador Master',email:'golfettojunior1@gmail.com',password:'admin123',role:'admin',status:'approved',isCreator:'true'},
-  {id:'local_user',name:'Usuário Padrão',email:'farmacia@ahvn.com',password:'farmacia123',role:'user',status:'approved',isCreator:'false'}
-];
+const LOCAL_USERS = []; // removido: não existe mais login local (v6)
 
 // ── CORRECAO CRITICA: o GAS armazena dados do usuario DENTRO da coluna "json". ──
 // getAllRows() retorna {id, json, chunk, total, timestamp} — os campos reais
@@ -5065,33 +5340,9 @@ function _parseGASRow(row) {
 // Atualiza usuario lendo json atual, fazendo merge e gravando de volta.
 // gsUpdate so sabe atualizar a coluna "json" — passar {status:'approved'}
 // diretamente nao funciona; o campo fica dentro do json serializado.
-async function _updateUser(id, updates) {
-  const rows = await gsGetAll('usuarios', true);
-  const row = rows.find(r => String(r.id) === String(id));
-  if (!row) return { status: 'not_found' };
-  const current = _parseUserRow(row);
-  const { chunk, total, timestamp, json: _j, ...userData } = current;
-  const merged = { ...userData, ...updates };
-  const res = await gsUpdate('usuarios', id, { json: JSON.stringify(merged) });
-  gsCache['usuarios'] = null;
-  return res;
-}
+async function _updateUser(id, updates) { return window.vnAuth.updateUser(id, updates); }
 
-async function getAllUsers(force=true) {
-  try {
-    // force=true garante que sempre busca do servidor no login,
-    // evitando que o cache antigo bloqueie usuarios recem-aprovados
-    const remote = await Promise.race([
-      gsGetAll('usuarios', force),
-      new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 7000))
-    ]);
-    if(Array.isArray(remote) && remote.length > 0) {
-      // CORRECAO: parse do campo "json" de cada linha para expor name, email, etc.
-      return remote.map(_parseUserRow).filter(u => u.id);
-    }
-  } catch(e) { console.warn('getAllUsers fallback local:', e.message); }
-  return LOCAL_USERS;
-}
+async function getAllUsers() { return window.vnAuth.listUsers(); }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -5109,97 +5360,13 @@ function togglePw(id, btn) {
   btn.textContent = inp.type==='password' ? '👁' : '🙈';
 }
 
-async function doLogin() {
-  const email=document.getElementById('loginEmail').value.trim();
-  const pass=document.getElementById('loginPassword').value;
-  const remember=document.getElementById('rememberMe').checked;
-  const errEl=document.getElementById('loginError');
-  errEl.style.display='none';
-  if(!email||!pass){errEl.textContent='Preencha e-mail e senha.';errEl.style.display='block';return;}
-  showLoading('Verificando credenciais...');
-  const users = await getAllUsers(true); // sempre busca fresco do servidor
-  hideLoading();
+async function doLogin() { return window.vnAuth.login(); }
 
-  // Normaliza: remove espaços extras e compara sem distinção de maiúsculas no e-mail
-  const u = users.find(x =>
-    String(x.email  || '').trim().toLowerCase() === email.toLowerCase() &&
-    String(x.password || '').trim() === pass.trim()
-  );
-  if(!u){errEl.textContent='E-mail ou senha incorretos.';errEl.style.display='block';return;}
+async function checkRemembered() { return window.vnAuth.checkRemembered(); }
 
-  // Normaliza status — Google Sheets pode retornar com espaço ou capitalizado
-  const status = String(u.status || '').trim().toLowerCase();
-  if(status !== 'approved'){errEl.textContent='Acesso pendente de aprovação. Contate o administrador.';errEl.style.display='block';return;}
-  currentUser=u;
-  if(remember) localStorage.setItem('fgUser',JSON.stringify({id:u.id,email:u.email,pass:u.password}));
-  showApp();
-}
+async function doRegister() { return window.vnAuth.register(); }
 
-async function checkRemembered() {
-  try {
-    const saved=JSON.parse(localStorage.getItem('fgUser'));
-    if(saved) {
-      // Força busca fresca para validar status atual (admin pode ter revogado)
-      const users = await getAllUsers(true);
-      const u = users.find(x =>
-        x.id === saved.id ||
-        (saved.email && String(x.email||'').trim().toLowerCase() === String(saved.email||'').trim().toLowerCase()
-                     && String(x.password||'').trim() === String(saved.pass||'').trim())
-      );
-      // Normaliza status igual ao doLogin
-      const status = String(u?.status || '').trim().toLowerCase();
-      if(u && status === 'approved'){currentUser=u;showApp();return true;}
-      // Se encontrou o usuário mas está pendente/revogado, limpa o lembrete
-      if(u && status !== 'approved') localStorage.removeItem('fgUser');
-    }
-  } catch(e){}
-  return false;
-}
-
-async function doRegister() {
-  const name=document.getElementById('regName').value.trim();
-  const email=document.getElementById('regEmail').value.trim();
-  const pass=document.getElementById('regPassword').value;
-  const role=document.getElementById('regRole').value;
-  const errEl=document.getElementById('registerError');
-  errEl.style.display='none';
-  if(!name||!email||pass.length<6){errEl.textContent='Preencha todos os campos (senha mín. 6 caracteres).';errEl.style.display='block';return;}
-  showLoading('Registrando...');
-  try {
-    const users=await Promise.race([
-      gsGetAll('usuarios',true),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000))
-    ]);
-    const parsedUsers = Array.isArray(users) ? users.map(_parseUserRow) : [];
-    if(parsedUsers.find(x=>String(x.email||'').trim().toLowerCase()===email.toLowerCase())){
-      hideLoading();errEl.textContent='E-mail já cadastrado.';errEl.style.display='block';return;
-    }
-  } catch(e) { /* continua mesmo sem verificar duplicatas */ }
-  const newUser = {id:'u_'+Date.now(),name,email,password:pass,role,status:'pending',isCreator:'false'};
-  // CRÍTICO: gsInsert precisa receber o objeto com json serializado para o GAS armazenar corretamente
-  const result = await gsInsert('usuarios', newUser);
-  gsCache['usuarios']=null;
-  hideLoading();
-  if(result && result.status === 'ok') {
-    errEl.style.cssText='display:block;background:rgba(0,212,170,0.1);border-color:rgba(0,212,170,0.3);color:var(--accent);';
-    errEl.textContent='✅ Cadastro solicitado! Aguarde aprovação do administrador.';
-  } else if(result && result.error) {
-    errEl.style.cssText='display:block;';
-    errEl.textContent='❌ Erro ao salvar cadastro: ' + result.error + '. Tente novamente.';
-  } else {
-    errEl.style.cssText='display:block;background:rgba(0,212,170,0.1);border-color:rgba(0,212,170,0.3);color:var(--accent);';
-    errEl.textContent='✅ Cadastro enviado! Aguarde aprovação do administrador.';
-  }
-}
-
-function doLogout() {
-  currentUser=null;
-  localStorage.removeItem('fgUser');
-  document.getElementById('app').style.display='none';
-  document.getElementById('loginPage').style.display='flex';
-  document.getElementById('loginEmail').value='';
-  document.getElementById('loginPassword').value='';
-}
+function doLogout() { return window.vnAuth.logout(); }
 
 function showApp() {
   document.getElementById('loginPage').style.display='none';
@@ -5209,7 +5376,7 @@ function showApp() {
   const sd=document.getElementById('sf-default');
   if(sf&&currentUser){
     sf.style.display='block';
-    document.getElementById('sf-username').textContent=`${currentUser.name} (${currentUser.role==='admin'?'Admin':'Usuário'})`;
+    document.getElementById('sf-username').textContent=`${currentUser.name} (${window.vnRoleLabel(currentUser.role)})`;
     if(sd) sd.style.display='none';
   }
   // Carrega backup local imediatamente (antes da sincronização com GAS)
@@ -5573,41 +5740,12 @@ function dedupMovimentos() {
 
 // Initialize: load all persisted data, then check remembered login, or show login page
 (async()=>{
+  // v6: os dados só são carregados DEPOIS do login (a carga leva o token da sessão)
   showLoading('Iniciando sistema...');
-  try {
-    // Carrega estado principal (products dinâmicos, NFs, estoque, etc.)
-    await Promise.race([
-      loadMainState(),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))
-    ]);
-  } catch(e) { /* usa dados em memória como fallback */ }
-  // Remove duplicatas de NF que possam ter sido geradas por bug anterior
-  dedupMovimentos();
-  // CARGA INICIAL DESATIVADA DO AUTO-INIT:
-  // A função carregarEstoquePlanilha() foi removida do init automático para evitar
-  // que re-importe dados toda vez que o banco estiver vazio (ex: após zeragem).
-  // Para reimportar manualmente use o botão "Reimportar Carga Inicial" nas configurações.
-  // carregarEstoquePlanilha();
-
-  try {
-    // Garante que o admin master existe no banco
-    const users = await Promise.race([
-      gsGetAll('usuarios'),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000))
-    ]);
-    if(Array.isArray(users) && users.length===0) {
-      await gsInsert('usuarios',{id:'creator',name:'Administrador Master',email:'golfettojunior1@gmail.com',password:'admin123',role:'admin',status:'approved',isCreator:'true'});
-      gsCache['usuarios']=null;
-    }
-  } catch(e) {
-    // API unavailable — will use LOCAL_USERS fallback
-  }
+  let remembered = false;
+  try { remembered = await window.vnAuth.checkRemembered(); } catch(e) {}
   hideLoading();
-  // Check if user was remembered
-  const remembered = await checkRemembered();
-  if(!remembered) {
-    document.getElementById('loginPage').style.display='flex';
-  }
+  if(!remembered) document.getElementById('loginPage').style.display='flex';
 })();
 
 // ── FORNECEDORES / QUALIFICAÇÃO ───────────────────────────────────────────────
@@ -6132,80 +6270,11 @@ async function excluirPreCadastro(id) {
 }
 
 // ── USERS (Admin) ─────────────────────────────────────────────────────────────
-async function renderUsuarios() {
-  const MASTER_EMAIL = 'golfettojunior1@gmail.com';
-  const isMaster = currentUser?.email === MASTER_EMAIL;
+async function renderUsuarios() { return window.vnAuth.renderUsuarios(); }
 
-  // Só o master pode acessar esta página
-  if(!isMaster){
-    const tbody=document.getElementById('usuarios-body');
-    if(tbody) tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:30px">⛔ Acesso restrito ao administrador master.</td></tr>';
-    return;
-  }
-
-  const users=await getAllUsers();
-  // Força busca remota para garantir que novos cadastros pendentes apareçam
-  let remoteUsers = [];
-  try {
-    remoteUsers = await Promise.race([
-      gsGetAll('usuarios', true),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000))
-    ]);
-  } catch(e) {}
-  const allUsers = (Array.isArray(remoteUsers) && remoteUsers.length > 0) ? remoteUsers : users;
-  const tbody=document.getElementById('usuarios-body');
-  if(!tbody) return;
-
-  // Atualiza cabeçalho para incluir coluna Senha
-  const thead = tbody.closest('table')?.querySelector('thead tr');
-  if(thead && thead.children.length < 6){
-    thead.innerHTML='<th>Nome</th><th>E-mail</th><th>Senha</th><th>Perfil</th><th>Status</th><th>Ações</th>';
-  }
-
-  tbody.innerHTML=allUsers.map(_parseUserRow).filter(u=>u&&u.id).map(u=>`<tr>
-    <td><b>${u.name||'—'}</b>${u.email===MASTER_EMAIL?'<span class="badge badge-red" style="margin-left:6px">👑 Master</span>':''}</td>
-    <td class="dim">${u.email||'—'}</td>
-    <td><code style="background:var(--surface3);padding:2px 7px;border-radius:5px;font-size:0.8rem;color:var(--accent);letter-spacing:0.04em">${u.password||'—'}</code></td>
-    <td><span class="badge badge-blue">${u.role==='admin'?'Admin':'Usuário'}</span></td>
-    <td><span class="badge ${u.status==='approved'?'badge-green':'badge-yellow'}">${u.status==='approved'?'✅ Aprovado':'⏳ Pendente'}</span></td>
-    <td style="display:flex;gap:6px;flex-wrap:wrap">
-      ${u.email!==MASTER_EMAIL&&u.status!=='approved'?`<button class="btn btn-sm btn-primary" onclick="aprovarUsuario('${u.id}')">✅ Aprovar</button>`:''}
-      ${u.email!==MASTER_EMAIL&&u.status==='approved'?`<button class="btn btn-sm btn-warning" onclick="revogarUsuario('${u.id}')">🔒 Revogar</button>`:''}
-      ${u.email!==MASTER_EMAIL?`<button class="btn btn-sm btn-danger" onclick="excluirUsuario('${u.id}')">🗑</button>`:'<span class="badge badge-gray">Protegido</span>'}
-    </td>
-  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum usuário.</td></tr>';
-}
-
-async function aprovarUsuario(id){
-  showLoading('Aprovando...');
-  // CORRECAO: usa _updateUser para ler o json atual, fazer merge e gravar de volta.
-  // gsUpdate direto com {status:'approved'} nao funciona — o GAS so atualiza
-  // a coluna "json" quando data.json esta presente; campos extras sao ignorados.
-  const res = await _updateUser(id, {status:'approved'});
-  hideLoading();
-  if(res && (res.status === 'ok' || res.status === 'updated')){
-    toast('✅ Usuário aprovado! Ele já pode fazer login.', 'success');
-  } else {
-    toast('⚠️ Erro ao aprovar. Tente novamente.', 'warning');
-  }
-  renderUsuarios();
-}
-async function revogarUsuario(id){
-  showLoading('Revogando...');
-  await _updateUser(id, {status:'pending'});
-  hideLoading();
-  toast('🔒 Acesso revogado.', 'warning');
-  renderUsuarios();
-}
-async function excluirUsuario(id){
-  if(!confirm('Excluir usuário?')) return;
-  showLoading('Excluindo...');
-  await gsDelete('usuarios', id);
-  gsCache['usuarios'] = null;
-  hideLoading();
-  toast('🗑 Usuário excluído.', 'success');
-  renderUsuarios();
-}
+async function aprovarUsuario(id) { return window.vnAuth.aprovar(id); }
+async function revogarUsuario(id) { return window.vnAuth.revogar(id); }
+async function excluirUsuario(id) { return window.vnAuth.excluir(id); }
 
 // ── EMAIL (Não Conformidade) ──────────────────────────────────────────────────
 function compressConfFiles(files){
@@ -6567,44 +6636,7 @@ function abrirModalPerfil(){
   document.getElementById('modal-perfil').classList.add('open');
 }
 
-async function salvarPerfil(){
-  const nome   = document.getElementById('perfil-nome').value.trim();
-  const senha  = document.getElementById('perfil-senha').value;
-  const senha2 = document.getElementById('perfil-senha2').value;
-  const errEl  = document.getElementById('perfil-error');
-  errEl.style.display = 'none';
-
-  if(!nome){ errEl.textContent='Informe seu nome.'; errEl.style.display='block'; return; }
-  if(senha && senha.length < 6){ errEl.textContent='A senha deve ter pelo menos 6 caracteres.'; errEl.style.display='block'; return; }
-  if(senha && senha !== senha2){ errEl.textContent='As senhas não conferem.'; errEl.style.display='block'; return; }
-
-  const updates = { name: nome };
-  if(senha) updates.password = senha;
-
-  showLoading('Salvando perfil...');
-  try {
-    // Atualiza no Google Sheets via _updateUser (faz merge correto do json)
-    await _updateUser(currentUser.id, updates);
-    // Atualiza currentUser em memória
-    currentUser.name = nome;
-    if(senha) currentUser.password = senha;
-    // Atualiza fallback local
-    const lu = LOCAL_USERS.find(u => u.id === currentUser.id);
-    if(lu){ lu.name = nome; if(senha) lu.password = senha; }
-    // Atualiza exibição na sidebar
-    document.getElementById('sf-username').textContent = `${currentUser.name} (${currentUser.role==='admin'?'Admin':'Usuário'})`;
-    // Atualiza localStorage se estiver salvo
-    const saved = localStorage.getItem('fgUser');
-    if(saved){ const s=JSON.parse(saved); s.pass=currentUser.password; localStorage.setItem('fgUser',JSON.stringify(s)); }
-    hideLoading();
-    closeModal('modal-perfil');
-    toast('✅ Perfil atualizado com sucesso!', 'success');
-  } catch(e){
-    hideLoading();
-    errEl.textContent = 'Erro ao salvar: ' + e.message;
-    errEl.style.display = 'block';
-  }
-}
+async function salvarPerfil() { return window.vnAuth.salvarPerfil(); }
 
 function toast(msg, type='success') {
   const existing=document.querySelector('.toast-notif');if(existing)existing.remove();
@@ -8390,7 +8422,7 @@ function iniciarSincronizacao() {
         try {
           const ser = { ...oc, itens: typeof oc.itens==='string' ? oc.itens : JSON.stringify(oc.itens||[]) };
           const payload = _toB64(JSON.stringify(ser));
-          const url = `${GS_API}?action=insert&sheet=oc_list&data=${encodeURIComponent(payload)}&enc=b64`;
+          const url = `${GS_API}?action=insert&sheet=oc_list&data=${encodeURIComponent(payload)}&enc=b64&token=${encodeURIComponent((window.vnAuth&&window.vnAuth._sess()&&window.vnAuth._sess().token)||'')}`;
           navigator.sendBeacon(url);
         } catch(err) {}
       });
@@ -9660,6 +9692,345 @@ window.ocPdfResumoHTML=resumoHTML; window.ocResumoHTML=resumoHTML; window.ocBoto
 window.OCI={tog:function(f,v){ if(S.ocs[f]) S.ocs[f].aberto=v; },abrir:abrir,fechar:fechar,arquivos:arquivos,incluir:function(f,v){S.ocs[f].incluir=v;renderImport();},edit:edit,meta:metaEdit,del:delItem,add:addItem,abreBusca:abreBusca,buscaProd:buscaProd,escolheProd:escolheProd,salvar:salvar,
   detalhe:detalhe,fechaDet:function(){$('modal-oc-det').classList.remove('open');},encerra:encerra,nfSet:nfSet,nfAceitarTodos:nfAceitarTodos,
   /* expostos para teste */ _t:{num:num,isoData:isoData,montarRascunhos:montarRascunhos,parseCSV:parseCSV,lerGrade:lerGrade,papelDe:papelDe,normCod:normCod,statusItem:statusItem,recalcOC:recalcOC,identificar:identificar,pendente:pendente,aplicarNF:aplicarNF,aplicarEntrega:aplicarEntrega,lerArquivo:lerArquivo,S:S}};
+})();
+
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   FARMAGEST • SOLICITAÇÕES DE PADRONIZAÇÃO / DESQUALIFICAÇÃO
+   - Novo perfil "solicitante" (setor): só enxerga esta área
+   - Formulário: tipo, produto, motivo, mensagem e imagens de referência
+   - E-mail automático (GAS) com cópia aos administradores e ao solicitante
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+var MASTER='golfettojunior1@gmail.com';
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function semAcento(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function usuario(){ try{ return (typeof currentUser!=='undefined'&&currentUser)||null; }catch(e){ return null; } }
+function ehSolicitante(){ var u=usuario(); return !!u&&u.role==='solicitante'; }
+function ehAdmin(){ var u=usuario(); return !!u&&(u.role==='admin'||u.email===MASTER); }
+function produtos(){ try{ return (typeof products!=='undefined'&&products)||window.products||[]; }catch(e){ return window.products||[]; } }
+function fmtDataHora(iso){ var d=new Date(iso); if(isNaN(d)) return ''; return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+function toastMsg(m,t){ try{ toast(m,t||'success'); }catch(e){ alert(m); } }
+
+/* ───────────── rótulos de perfil (cadastro e tela de usuários) ───────────── */
+function rotuloPerfil(r){ return r==='admin'?'Admin':(r==='solicitante'?'Solicitante':'Usuário'); }
+window.vnRoleLabel=rotuloPerfil;
+window.vnPerfilCell=function(u,master){
+  if(u.email===master) return '<span class="badge badge-blue">Admin</span>';
+  var o=function(v,t){return '<option value="'+v+'"'+(u.role===v||(!u.role&&v==='user')?' selected':'')+'>'+t+'</option>';};
+  return '<select class="form-input" style="padding:3px 6px;font-size:.78rem;min-width:130px" onchange="vnMudarPerfil(\''+u.id+'\',this.value)">'+o('solicitante','Solicitante (setor)')+o('user','Usuário')+o('admin','Admin')+'</select>'+
+         (u.role==='solicitante'?'<div style="font-size:.72rem;color:var(--text3);margin-top:3px;cursor:pointer" onclick="vnMudarSetor(\''+u.id+'\',\''+esc(u.setor||'').replace(/\\/g,'')+'\')">🏷️ '+esc(u.setor||'definir setor')+'</div>':'');
+};
+window.vnMudarPerfil=async function(id,role){
+  var extra={role:role};
+  if(role==='solicitante'){ var s=prompt('Setor deste solicitante (ex.: UTI, Centro Cirúrgico, Enfermagem):',''); if(s===null){ try{renderUsuarios();}catch(e){} return; } extra.setor=s.trim(); }
+  try{ showLoading('Salvando perfil...'); await _updateUser(id,extra); hideLoading(); toastMsg('✅ Perfil atualizado.'); }catch(e){ try{hideLoading();}catch(x){} toastMsg('⚠️ Erro ao salvar o perfil.','warning'); }
+  try{renderUsuarios();}catch(e){}
+};
+window.vnMudarSetor=async function(id,atual){
+  var s=prompt('Setor do solicitante:',atual||''); if(s===null) return;
+  try{ showLoading('Salvando...'); await _updateUser(id,{setor:s.trim()}); hideLoading(); }catch(e){ try{hideLoading();}catch(x){} }
+  try{renderUsuarios();}catch(e){}
+};
+window.vlRoleChange=function(){
+  var r=$('regRole'), w=$('regSetorWrap'); if(r&&w) w.style.display=(r.value==='solicitante')?'block':'none';
+};
+
+/* ───────────── estado ───────────── */
+var P={lista:[],carregado:false,carregando:false,filtro:{q:'',tipo:'',status:''},form:null,fotos:[],busca:''};
+var STATUS={pendente:['⏳ Pendente','badge-yellow'],em_analise:['🔎 Em análise','badge-blue'],aprovada:['✅ Aprovada','badge-green'],concluida:['🏁 Concluída','badge-green'],recusada:['🚫 Recusada','badge-red']};
+var MOTIVOS={
+  padronizacao:['Novo tratamento / procedimento','Substituir item atual','Falta de alternativa / desabastecimento','Redução de custo','Melhor resultado clínico','Outro'],
+  desqualificacao:['Problema de qualidade','Reação adversa / ineficácia','Embalagem ou rotulagem inadequada','Descontinuado pelo fabricante','Custo elevado','Outro']
+};
+
+/* ───────────── dados (GAS) ───────────── */
+function parseRow(r){ try{ var o=JSON.parse(r.json); if(o&&typeof o==='object'){ if(!o.id) o.id=r.id; return o; } }catch(e){} return null; }
+async function carregar(force){
+  if(P.carregando) return; P.carregando=true;
+  try{
+    var rows=await gsGetAll('padronizacoes',!!force);
+    P.lista=(Array.isArray(rows)?rows:[]).map(parseRow).filter(function(x){return x&&x.id;});
+    P.carregado=true;
+  }catch(e){ console.warn('padronizacoes:',e); }
+  P.carregando=false; atualizaBadge();
+}
+function minhaLista(){
+  var u=usuario(); if(!u) return [];
+  var l=ehAdmin()?P.lista:P.lista.filter(function(r){return String((r.solicitante||{}).email||'').toLowerCase()===String(u.email||'').toLowerCase();});
+  return l.slice().sort(function(a,b){return String(b.criado_em||'').localeCompare(String(a.criado_em||''));});
+}
+function atualizaBadge(){
+  var b=$('padron-badge'); if(!b) return;
+  var n=ehAdmin()?P.lista.filter(function(r){return r.status==='pendente';}).length:0;
+  b.textContent=n; b.style.display=n?'inline-block':'none';
+}
+
+/* ───────────── página e navegação ───────────── */
+function criaPagina(){
+  var content=$('content'); if(!content||$('page-padron')) return;
+  var pg=document.createElement('div'); pg.className='page'; pg.id='page-padron';
+  pg.innerHTML='<div id="padron-corpo"></div>';
+  content.appendChild(pg);
+  var anchor=$('nav-sec-admin');
+  var sec=document.createElement('div'); sec.className='nav-section nav-sec-padron'; sec.textContent='Solicitações';
+  var btn=document.createElement('button'); btn.className='nav-item nav-padron'; btn.setAttribute('onclick',"navTo('padron',this)");
+  btn.innerHTML='<span class="icon">📝</span> Padronização <span class="nav-badge warn" id="padron-badge" style="display:none">0</span>';
+  if(anchor&&anchor.parentNode){ anchor.parentNode.insertBefore(sec,anchor); anchor.parentNode.insertBefore(btn,anchor); }
+  else { var sb=$('sidebar'); if(sb){ sb.appendChild(sec); sb.appendChild(btn); } }
+}
+function topbarBotao(){
+  var t=$('topbar-actions'); if(t) t.innerHTML='<button class="btn btn-primary" onclick="PAD.novo()">➕ Nova solicitação</button>';
+}
+function renderPagina(){
+  var c=$('padron-corpo'); if(!c) return;
+  var l=minhaLista(), cont=function(s){return l.filter(function(r){return r.status===s;}).length;};
+  var f=P.filtro, q=semAcento(f.q).toLowerCase();
+  var vis=l.filter(function(r){
+    if(f.tipo&&r.tipo!==f.tipo) return false; if(f.status&&r.status!==f.status) return false;
+    if(q){ var t=semAcento([r.id,(r.produto||{}).nome,(r.produto||{}).codigo,(r.produto||{}).marca,r.setor,(r.solicitante||{}).nome].join(' ')).toLowerCase(); if(t.indexOf(q)<0) return false; }
+    return true;
+  });
+  var titulo=ehAdmin()?'Todas as solicitações':'Minhas solicitações';
+  c.innerHTML=
+   '<div class="stats-row">'+
+     '<div class="stat-card warn"><div class="stat-label">PENDENTES</div><div class="stat-value">'+cont('pendente')+'</div></div>'+
+     '<div class="stat-card"><div class="stat-label">EM ANÁLISE</div><div class="stat-value">'+cont('em_analise')+'</div></div>'+
+     '<div class="stat-card green"><div class="stat-label">APROVADAS / CONCLUÍDAS</div><div class="stat-value">'+(cont('aprovada')+cont('concluida'))+'</div></div>'+
+     '<div class="stat-card"><div class="stat-label">RECUSADAS</div><div class="stat-value">'+cont('recusada')+'</div></div>'+
+   '</div>'+
+   '<div class="table-wrap"><div class="table-header"><div class="table-header-title">'+titulo+' <span style="color:var(--text3);font-weight:500">('+vis.length+')</span></div>'+
+     '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+       '<input class="form-input" style="max-width:220px" placeholder="Buscar produto, setor, nº…" value="'+esc(f.q)+'" oninput="PAD.filtra(\'q\',this.value)">'+
+       '<select class="form-input" style="max-width:170px" onchange="PAD.filtra(\'tipo\',this.value)"><option value="">Todos os tipos</option><option value="padronizacao"'+(f.tipo==='padronizacao'?' selected':'')+'>🆕 Padronização</option><option value="desqualificacao"'+(f.tipo==='desqualificacao'?' selected':'')+'>⛔ Desqualificação</option></select>'+
+       '<select class="form-input" style="max-width:160px" onchange="PAD.filtra(\'status\',this.value)"><option value="">Todos os status</option>'+Object.keys(STATUS).map(function(k){return '<option value="'+k+'"'+(f.status===k?' selected':'')+'>'+STATUS[k][0]+'</option>';}).join('')+'</select>'+
+       '<button class="btn btn-secondary" onclick="PAD.recarrega()">🔄</button>'+
+     '</div></div>'+
+     '<div style="overflow-x:auto"><table><thead><tr><th>Nº</th><th>Tipo</th><th>Produto</th><th>Setor</th>'+(ehAdmin()?'<th>Solicitante</th>':'')+'<th>Data</th><th>Status</th><th></th></tr></thead><tbody>'+
+     (vis.length?vis.map(function(r){
+       var p=r.produto||{}, st=STATUS[r.status]||[r.status,'badge-gray'];
+       return '<tr style="cursor:pointer" onclick="PAD.ver(\''+esc(r.id)+'\')"><td><b>'+esc(r.id)+'</b>'+(r.urgencia==='alta'?' <span class="badge badge-red">URGENTE</span>':'')+'</td>'+
+         '<td>'+(r.tipo==='padronizacao'?'<span class="badge badge-green">🆕 Padronização</span>':'<span class="badge badge-red">⛔ Desqualificação</span>')+'</td>'+
+         '<td><b>'+esc(p.nome)+'</b>'+(p.marca?'<div style="font-size:.74rem;color:var(--text3)">'+esc(p.marca)+'</div>':'')+'</td><td>'+esc(r.setor)+'</td>'+
+         (ehAdmin()?'<td>'+esc((r.solicitante||{}).nome||(r.solicitante||{}).email)+'</td>':'')+
+         '<td style="white-space:nowrap">'+esc(fmtDataHora(r.criado_em))+'</td><td><span class="badge '+st[1]+'">'+st[0]+'</span></td>'+
+         '<td>'+((r.imagens||[]).length?'📎 '+r.imagens.length:'')+'</td></tr>';
+     }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:30px">'+(P.carregando?'Carregando…':'Nenhuma solicitação por aqui. Clique em <b>➕ Nova solicitação</b>.')+'</td></tr>')+
+     '</tbody></table></div></div>';
+}
+
+/* ───────────── formulário ───────────── */
+function garanteModais(){
+  if($('modal-padron-form')) return;
+  var d=document.createElement('div'); d.className='modal-overlay'; d.id='modal-padron-form';
+  d.innerHTML='<div class="modal" style="max-width:760px;width:96vw;max-height:94vh"><div class="modal-header"><h3 id="pd-titulo">📝 Nova solicitação</h3><button class="modal-close" onclick="PAD.fechaForm()">✕</button></div><div class="modal-body" id="pd-corpo"></div><div class="modal-footer"><span id="pd-msg" style="margin-right:auto;font-size:.8rem"></span><button class="btn btn-secondary" onclick="PAD.fechaForm()">Cancelar</button><button class="btn btn-primary" id="pd-enviar" onclick="PAD.enviar()">📨 Enviar solicitação</button></div></div>';
+  document.body.appendChild(d);
+  var v=document.createElement('div'); v.className='modal-overlay'; v.id='modal-padron-ver';
+  v.innerHTML='<div class="modal" style="max-width:820px;width:96vw;max-height:94vh"><div class="modal-header"><h3 id="pv-titulo"></h3><button class="modal-close" onclick="PAD.fechaVer()">✕</button></div><div class="modal-body" id="pv-corpo"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="PAD.fechaVer()">Fechar</button></div></div>';
+  document.body.appendChild(v);
+}
+function novoForm(){
+  var u=usuario();
+  P.form={tipo:'padronizacao',setor:(u&&u.setor)||'',nome:'',codigo:'',marca:'',apresentacao:'',fornecedor:'',consumo:'',motivo:'',urgencia:'normal',mensagem:''};
+  P.fotos=[]; P.busca='';
+  garanteModais(); renderForm(); $('pd-msg').textContent=''; $('pd-enviar').disabled=false; $('pd-enviar').textContent='📨 Enviar solicitação';
+  $('modal-padron-form').classList.add('open');
+}
+function renderForm(){
+  var f=P.form, ehPad=f.tipo==='padronizacao';
+  var sug='';
+  if(P.busca&&P.busca.length>=2){
+    var q=semAcento(P.busca).toLowerCase();
+    var lst=produtos().filter(function(p){return semAcento(p.material).toLowerCase().indexOf(q)>=0||String(p.cod_bionexo).toLowerCase()===q||String(p.cod_hlr).toLowerCase()===q;}).slice(0,7);
+    sug='<div class="pd-sugs">'+(lst.map(function(p){return '<div class="oci-sug" onclick="PAD.escolheProd('+p.id+')"><b>'+esc(p.material)+'</b> <span style="color:var(--text3)">cód '+esc(p.cod_bionexo)+(p.cod_hlr&&p.cod_hlr!==p.cod_bionexo?' / '+esc(p.cod_hlr):'')+'</span></div>';}).join('')||'<div style="padding:8px;color:var(--text3);font-size:.78rem">Nada encontrado no cadastro — preencha os dados abaixo manualmente.</div>')+'</div>';
+  }
+  var campo=function(label,id,val,ph,extra){return '<div class="pd-f"><label>'+label+'</label><input class="form-input" id="'+id+'" value="'+esc(val)+'" placeholder="'+esc(ph||'')+'" oninput="PAD.set(\''+id.replace('pd-','')+'\',this.value)" '+(extra||'')+'></div>';};
+  $('pd-corpo').innerHTML=
+    '<div class="pd-tipos">'+
+      '<div class="pd-tipo'+(ehPad?' on pad':'')+'" onclick="PAD.tipo(\'padronizacao\')"><div class="ic">🆕</div><b>Padronização</b><span>Incluir um item na padronização do hospital</span></div>'+
+      '<div class="pd-tipo'+(!ehPad?' on desq':'')+'" onclick="PAD.tipo(\'desqualificacao\')"><div class="ic">⛔</div><b>Desqualificação</b><span>Retirar / despadronizar um item ou marca</span></div>'+
+    '</div>'+
+    '<div class="pd-sec">📌 Quem está solicitando</div>'+
+    '<div class="pd-grid">'+campo('Setor *','pd-setor',f.setor,'Ex.: UTI Adulto, Centro Cirúrgico')+
+      '<div class="pd-f"><label>Urgência</label><select class="form-input" id="pd-urgencia" onchange="PAD.set(\'urgencia\',this.value)"><option value="normal"'+(f.urgencia==='normal'?' selected':'')+'>Normal</option><option value="alta"'+(f.urgencia==='alta'?' selected':'')+'>Alta</option></select></div></div>'+
+    '<div class="pd-sec">💊 Dados do produto</div>'+
+    '<div class="pd-f"><label>Buscar no cadastro do hospital <span style="font-weight:500;text-transform:none;letter-spacing:0">(opcional'+(!ehPad?' — recomendado':'')+')</span></label>'+
+      '<input class="form-input" id="pd-busca" placeholder="Digite o nome ou o código do item…" value="'+esc(P.busca)+'" oninput="PAD.busca(this.value)" autocomplete="off">'+sug+'</div>'+
+    (f.codigo?'<div class="pd-chip">✅ Item do cadastro: código <b>'+esc(f.codigo)+'</b> <a onclick="PAD.limpaProd()">remover vínculo</a></div>':'')+
+    campo('Nome / descrição do produto *','pd-nome',f.nome,'Ex.: Dipirona 500 mg/mL — ampola 2 mL')+
+    '<div class="pd-grid">'+campo('Marca / fabricante','pd-marca',f.marca,'')+campo('Apresentação / concentração','pd-apresentacao',f.apresentacao,'Ex.: caixa com 100 ampolas')+'</div>'+
+    '<div class="pd-grid">'+campo(ehPad?'Fornecedor sugerido':'Fornecedor atual','pd-fornecedor',f.fornecedor,'')+campo('Consumo médio mensal','pd-consumo',f.consumo,'Ex.: 200 unidades')+'</div>'+
+    '<div class="pd-f"><label>'+(ehPad?'Motivo da padronização *':'Motivo da desqualificação *')+'</label><select class="form-input" id="pd-motivo" onchange="PAD.set(\'motivo\',this.value)"><option value="">Selecione…</option>'+MOTIVOS[f.tipo].map(function(m){return '<option'+(f.motivo===m?' selected':'')+'>'+m+'</option>';}).join('')+'</select></div>'+
+    '<div class="pd-sec">💬 Mensagem</div>'+
+    '<div class="pd-f"><label>Justifique o pedido *</label><textarea class="form-input" id="pd-mensagem" rows="5" placeholder="'+(ehPad?'Explique a necessidade clínica/assistencial, onde será usado e por que o item atual não atende.':'Descreva o problema ocorrido (lote, data, setor, o que aconteceu) e se há alternativa.')+'" oninput="PAD.set(\'mensagem\',this.value)">'+esc(f.mensagem)+'</textarea></div>'+
+    '<div class="pd-sec">🖼️ Imagens de referência <span style="font-weight:500;color:var(--text3);text-transform:none;letter-spacing:0">(até 5 — foto da embalagem, bula, produto…)</span></div>'+
+    '<label class="oci-drop" style="padding:14px" for="pd-file"><div style="font-weight:700">📷 Tirar foto ou escolher imagens</div><div style="font-size:.74rem;color:var(--text3)">JPG, PNG ou WEBP — são reduzidas automaticamente</div><input type="file" id="pd-file" accept="image/*" multiple style="display:none" onchange="PAD.fotos(this.files);this.value=\'\'"></label>'+
+    '<div class="pd-fotos">'+P.fotos.map(function(x,i){return '<div class="pd-foto"><img src="'+x.preview+'" alt=""><button onclick="PAD.tiraFoto('+i+')" title="Remover">✕</button></div>';}).join('')+'</div>'+
+    '<div style="font-size:.74rem;color:var(--text3);margin-top:10px">Ao enviar, um e-mail é disparado automaticamente para o setor de Compras, com cópia para os administradores e para o seu e-mail ('+esc((usuario()||{}).email||'')+').</div>';
+}
+function set(k,v){ if(P.form) P.form[k]=v; }
+function setTipo(t){ if(P.form.tipo===t) return; P.form.tipo=t; P.form.motivo=''; renderForm(); }
+function busca(v){ P.busca=v; var el=document.activeElement, pos=el&&el.selectionStart; renderForm(); var n=$('pd-busca'); if(n){ n.focus(); try{n.setSelectionRange(pos,pos);}catch(e){} } }
+function escolheProd(id){
+  var p=produtos().find(function(x){return x.id==id;}); if(!p) return;
+  P.form.codigo=String(p.cod_bionexo||p.cod_hlr||''); P.form.nome=p.material; P.busca=''; renderForm();
+}
+function limpaProd(){ P.form.codigo=''; renderForm(); }
+function comprimir(file){
+  return new Promise(function(res,rej){
+    var img=new Image(), url=URL.createObjectURL(file);
+    img.onload=function(){
+      var max=1280, k=Math.min(1,max/Math.max(img.width,img.height)), w=Math.round(img.width*k), h=Math.round(img.height*k);
+      var c=document.createElement('canvas'); c.width=w; c.height=h; var g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,w,h); g.drawImage(img,0,0,w,h);
+      var d=c.toDataURL('image/jpeg',0.8); URL.revokeObjectURL(url);
+      res({nome:file.name.replace(/\.[^.]+$/,'')+'.jpg',mime:'image/jpeg',base64:d.split(',')[1],preview:d});
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('Não consegui abrir a imagem "'+file.name+'". Use JPG, PNG ou WEBP.')); };
+    img.src=url;
+  });
+}
+async function addFotos(files){
+  var arr=Array.prototype.slice.call(files||[]), msg=$('pd-msg'); msg.style.color='var(--text2)';
+  for(var i=0;i<arr.length;i++){
+    if(P.fotos.length>=5){ msg.style.color='var(--yellow)'; msg.textContent='Máximo de 5 imagens.'; break; }
+    try{ msg.textContent='Preparando imagem…'; P.fotos.push(await comprimir(arr[i])); msg.textContent=''; }
+    catch(e){ msg.style.color='var(--red)'; msg.textContent=e.message; }
+  }
+  renderForm();
+}
+function tiraFoto(i){ P.fotos.splice(i,1); renderForm(); }
+function fechaForm(){ var m=$('modal-padron-form'); if(m) m.classList.remove('open'); }
+
+async function enviar(){
+  var f=P.form, msg=$('pd-msg'), u=usuario(); msg.style.color='var(--red)';
+  var erros=[];
+  if(!String(f.setor).trim()) erros.push('informe o setor');
+  if(!String(f.nome).trim()) erros.push('informe o nome do produto');
+  if(!f.motivo) erros.push('escolha o motivo');
+  if(String(f.mensagem).trim().length<10) erros.push('escreva a justificativa (mín. 10 caracteres)');
+  if(erros.length){ msg.textContent='Falta: '+erros.join(', ')+'.'; return; }
+  if(!u||!u.email){ msg.textContent='Faça login novamente.'; return; }
+  var btn=$('pd-enviar'); btn.disabled=true; btn.textContent='Enviando…'; msg.style.color='var(--text2)'; msg.textContent='Enviando solicitação e e-mails…';
+  var body={action:'registrarPadronizacao',tipo:f.tipo,setor:f.setor.trim(),urgencia:f.urgencia,motivo:f.motivo,mensagem:f.mensagem.trim(),
+    solicitante:{nome:u.name||'',email:u.email},
+    produto:{nome:f.nome.trim(),codigo:f.codigo,marca:f.marca.trim(),apresentacao:f.apresentacao.trim(),fornecedor:f.fornecedor.trim(),consumo:f.consumo.trim()},
+    fotos:P.fotos.map(function(x){return {nome:x.nome,mime:x.mime,base64:x.base64};})};
+  try{
+    var r=await fetch(GS_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+    var j=await r.json();
+    if(!j||!j.success) throw new Error((j&&j.error)||'O servidor não confirmou o envio. Verifique se o script do Google foi atualizado.');
+    P.lista.unshift(j.record); try{ gsCache['padronizacoes']=null; }catch(e){}
+    fechaForm(); renderPagina(); atualizaBadge();
+    if(j.email&&j.email.ok) toastMsg('✅ Solicitação '+j.id+' enviada! E-mail disparado com cópia para você e para os administradores.');
+    else toastMsg('⚠️ Solicitação '+j.id+' registrada, mas o e-mail não saiu'+((j.email&&j.email.erro)?' ('+String(j.email.erro).slice(0,80)+')':'')+'. Avise o administrador.','warning');
+  }catch(e){
+    btn.disabled=false; btn.textContent='📨 Enviar solicitação'; msg.style.color='var(--red)';
+    msg.textContent='Não foi possível enviar: '+(e&&e.message||e);
+  }
+}
+
+/* ───────────── detalhe + andamento (admin) ───────────── */
+function ver(id){
+  var r=P.lista.find(function(x){return String(x.id)===String(id);}); if(!r) return; garanteModais();
+  var p=r.produto||{}, st=STATUS[r.status]||[r.status,'badge-gray'];
+  var linha=function(k,v){ return v?'<tr><td style="font-weight:700;width:34%;color:var(--text2)">'+k+'</td><td>'+esc(v)+'</td></tr>':''; };
+  var imgs=(r.imagens||[]).length?'<div class="pd-sec">🖼️ Imagens de referência</div><div class="pd-fotos">'+r.imagens.map(function(m){
+      return m.url?'<a class="pd-foto" href="'+esc(m.url)+'" target="_blank" rel="noopener"><img src="'+esc(m.thumb||m.url)+'" alt="'+esc(m.nome)+'" onerror="this.style.display=\'none\';this.parentNode.insertAdjacentHTML(\'beforeend\',\'<span style=&quot;font-size:.7rem;padding:6px&quot;>abrir imagem</span>\')"></a>':'<span class="badge badge-gray">'+esc(m.nome)+' (somente no e-mail)</span>'; }).join('')+'</div>':'';
+  var hist='<div class="pd-sec">🕘 Andamento</div>'+(r.historico||[]).slice().reverse().map(function(h){var s=STATUS[h.status]||[h.status,'badge-gray']; return '<div class="pd-hist"><span class="badge '+s[1]+'">'+s[0]+'</span> <b>'+esc(h.por||'')+'</b> <span style="color:var(--text3);font-size:.74rem">'+esc(fmtDataHora(h.data))+'</span>'+(h.texto?'<div style="margin-top:4px;font-size:.82rem">'+esc(h.texto)+'</div>':'')+'</div>';}).join('');
+  var adm=ehAdmin()?'<div class="pd-sec">🛠️ Responder / atualizar andamento</div><div class="pd-grid"><div class="pd-f"><label>Novo status</label><select class="form-input" id="pv-status">'+Object.keys(STATUS).map(function(k){return '<option value="'+k+'"'+(r.status===k?' selected':'')+'>'+STATUS[k][0]+'</option>';}).join('')+'</select></div></div><div class="pd-f"><label>Resposta ao solicitante</label><textarea class="form-input" id="pv-resp" rows="3" placeholder="Ex.: Item aprovado pela comissão — cadastro em andamento."></textarea></div><button class="btn btn-primary" onclick="PAD.salvaAndamento(\''+esc(r.id)+'\')">💾 Salvar andamento</button>':'';
+  $('pv-titulo').innerHTML=esc(r.id)+' — '+(r.tipo==='padronizacao'?'🆕 Padronização':'⛔ Desqualificação')+' &nbsp;<span class="badge '+st[1]+'">'+st[0]+'</span>';
+  $('pv-corpo').innerHTML='<table class="oci-tab"><tbody>'+linha('Produto',p.nome)+linha('Código no cadastro',p.codigo)+linha('Marca / fabricante',p.marca)+linha('Apresentação',p.apresentacao)+linha('Fornecedor',p.fornecedor)+linha('Consumo médio mensal',p.consumo)+linha('Motivo',r.motivo)+linha('Urgência',r.urgencia==='alta'?'ALTA':'Normal')+linha('Setor',r.setor)+linha('Solicitante',((r.solicitante||{}).nome||'')+' — '+((r.solicitante||{}).email||''))+linha('Enviada em',fmtDataHora(r.criado_em))+'</tbody></table>'+
+    '<div class="pd-msgbox"><b>Mensagem do solicitante</b><div style="margin-top:6px;white-space:pre-wrap">'+esc(r.mensagem)+'</div></div>'+imgs+hist+adm;
+  $('modal-padron-ver').classList.add('open');
+}
+async function salvaAndamento(id){
+  var r=P.lista.find(function(x){return String(x.id)===String(id);}); if(!r) return;
+  var st=$('pv-status').value, txt=$('pv-resp').value.trim(), u=usuario();
+  if(st===r.status&&!txt){ toastMsg('Escolha outro status ou escreva uma resposta.','warning'); return; }
+  r.status=st; (r.historico=r.historico||[]).push({data:new Date().toISOString(),por:(u&&u.name)||'Admin',status:st,texto:txt});
+  try{
+    showLoading('Salvando...');
+    var res=await gsUpdate('padronizacoes',r.id,{json:JSON.stringify(r)});
+    try{ gsCache['padronizacoes']=null; }catch(e){}
+    hideLoading();
+    if(res&&res.status==='ok') toastMsg('✅ Andamento salvo.'); else toastMsg('⚠️ Não foi possível salvar no servidor.','warning');
+  }catch(e){ try{hideLoading();}catch(x){} toastMsg('⚠️ Erro ao salvar.','warning'); }
+  renderPagina(); atualizaBadge(); ver(id);
+}
+
+/* ───────────── regras do perfil solicitante + ganchos ───────────── */
+function aplicaPerfil(){
+  var sol=ehSolicitante(); document.body.classList.toggle('vn-solicitante',sol);
+  atualizaBadge();
+}
+var _showApp=window.showApp;
+if(typeof _showApp==='function'){
+  window.showApp=function(){
+    var r=_showApp.apply(this,arguments);
+    try{ aplicaPerfil(); carregar(true).then(function(){ renderPaginaSePreciso(); }); if(ehSolicitante()){ var b=document.querySelector('.nav-padron'); navTo('padron',b); } }catch(e){ console.warn('padron:',e); }
+    return r;
+  };
+}
+function renderPaginaSePreciso(){ var pg=$('page-padron'); if(pg&&pg.classList.contains('active')) renderPagina(); }
+var _nav=window.navTo;
+window.navTo=function(page,el){
+  if(ehSolicitante()&&page!=='padron'){ page='padron'; el=document.querySelector('.nav-padron'); }
+  var r=_nav.call(this,page,el);
+  if(page==='padron'){
+    var t=$('page-title'); if(t) t.textContent='Solicitações de Padronização';
+    topbarBotao(); renderPagina(); if(!P.carregado) carregar(false).then(renderPaginaSePreciso);
+  }
+  return r;
+};
+var _logout=window.doLogout;
+if(typeof _logout==='function'){ window.doLogout=function(){ document.body.classList.remove('vn-solicitante'); P.lista=[]; P.carregado=false; return _logout.apply(this,arguments); }; }
+
+criaPagina();
+window.PAD={novo:novoForm,fechaForm:fechaForm,tipo:setTipo,set:set,busca:busca,escolheProd:escolheProd,limpaProd:limpaProd,fotos:addFotos,tiraFoto:tiraFoto,enviar:enviar,
+  ver:ver,fechaVer:function(){$('modal-padron-ver').classList.remove('open');},salvaAndamento:salvaAndamento,
+  filtra:function(k,v){P.filtro[k]=v;renderPagina();if(k==='q'){var i=document.querySelector('#padron-corpo input.form-input');if(i){i.focus();i.setSelectionRange(v.length,v.length);}}},recarrega:function(){carregar(true).then(renderPagina);},_P:P};
+})();
+
+</script>
+<script>
+/* FarmaGest • v6: pontes pós-carga (rodam depois do script principal) */
+(function(){
+'use strict';
+var _gsGetAll=window.gsGetAll, _lms=window.loadMainState, cargaOk=false;
+
+// leituras forçadas logo após a carga em lote são servidas da própria carga (mesmos dados, 0 requisições)
+if(typeof _gsGetAll==='function'){
+  window.gsGetAll=async function(sheet,force){
+    var p=window.vnAuth&&window.vnAuth.pre&&window.vnAuth.pre(sheet);
+    if(p){ try{ gsCache[sheet]=p; }catch(e){} return p; }
+    return _gsGetAll.apply(this,arguments);
+  };
+}
+function avisoOffline(){
+  if(document.getElementById('vn-aviso-offline')) return;
+  var a=document.createElement('div'); a.id='vn-aviso-offline';
+  a.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;padding:12px 20px;text-align:center;font-size:0.9rem;font-weight:bold';
+  a.innerHTML='⚠️ Banco de dados inacessível — exibindo dados locais deste computador. <button onclick="location.reload()" style="margin-left:12px;padding:4px 12px;border:none;border-radius:6px;cursor:pointer">Tentar novamente</button>';
+  document.body.prepend(a);
+}
+// loadMainState "tudo ou nada": só aplica dados se a leitura em lote inteira deu certo.
+// Falha de leitura NUNCA vira "planilha vazia" (o que zeraria o estoque na tela).
+if(typeof _lms==='function'){
+  window.loadMainState=async function(){
+    var r=await window.vnAuth.prefetch();
+    if(r.ok){ cargaOk=true; var av=document.getElementById('vn-aviso-offline'); if(av) av.remove(); return _lms.apply(this,arguments); }
+    if(r.motivo==='auth') return;                                   // sessão caiu: o login reaparece, dados atuais ficam intactos
+    console.warn('loadMainState: leitura em lote falhou ('+r.motivo+') — dados atuais mantidos.',r.erro||'');
+    if(!cargaOk){                                                   // primeira carga sem servidor: usa as cópias locais (como antes)
+      try{ _loadFromLocalStorage(); }catch(e){}
+      try{ hideLoading(); }catch(e){}
+      avisoOffline();
+    }
+  };
+}
 })();
 
 </script>
