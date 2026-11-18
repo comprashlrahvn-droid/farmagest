@@ -1445,7 +1445,7 @@ body.vn-solicitante #sidebar .nav-section:not(.nav-sec-padron){display:none!impo
 var SKEY='fgSess', MASTER='golfettojunior1@gmail.com';
 var PUB={test:1,confirmOCReceipt:1,markOCRead:1,login:1,register:1};
 var SOL_OK={me:1,logout:1,updateProfile:1,registrarPadronizacao:1,test:1};
-var sess=null, expirando=false, listaCache=[];
+var sess=null, expirando=false, listaCache=[], ultimoEmail='';
 // leitura em lote (login/me já trazem os dados): serve as leituras forçadas por alguns segundos
 var LOTE=['products','nf_history','movimentos','entregas','orders','val_alerts','config_vinculos','oc_list','padronizacoes'];
 var PRE={}, PRE_TTL=10000, preOkAt=0;
@@ -1516,7 +1516,9 @@ async function chamar(action,payload,ms){
   var body=Object.assign({action:action},payload||{});
   try{
     var r=await comTimeout(fetch(GS_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),redirect:'follow'}),ms||15000);
-    return await r.json();
+    var j=await r.json();
+    if(j&&j.error==='sem-corpo') throw new Error('post-sem-corpo');       // ambiente que perde o corpo do POST: usa GET
+    return j;
   }catch(e){
     var u=GS_API+'?action='+encodeURIComponent(action)+'&enc=b64&data='+encodeURIComponent(b64(JSON.stringify(body)));
     var r2=await comTimeout(fetch(u,{redirect:'follow'}),ms||15000);
@@ -1548,6 +1550,7 @@ async function carregarDados(user){
   try{ hideLoading(); }catch(e){}
 }
 async function iniciarSessao(user){
+  ultimoEmail=String(user.email||'').toLowerCase();
   setUsuario(user);
   await carregarDados(user);
   if(!sess) return;                                   // sessão caiu durante a carga: tela de login já foi mostrada
@@ -1564,6 +1567,9 @@ async function login(){
   catch(e){ hideLoading(); er.textContent='Não foi possível conectar ao servidor. Verifique a internet e tente novamente.'; er.style.display='block'; return; }
   hideLoading();
   if(!r||!r.ok){ er.textContent=(r&&r.message)||'E-mail ou senha incorretos.'; er.style.display='block'; return; }
+  if(ultimoEmail&&ultimoEmail!==String(r.user.email).toLowerCase()){      // outra pessoa no mesmo computador: começa do zero
+    sess={token:r.token,exp:r.exp,user:r.user}; gravaSess(lembrar); location.reload(); return;
+  }
   sess={token:r.token,exp:r.exp,user:r.user}; gravaSess(lembrar); guardaLote(r.data);
   $('loginPassword').value='';
   await iniciarSessao(r.user);
@@ -1603,6 +1609,7 @@ function logout(){
   setUsuario(null); document.body.classList.remove('vn-solicitante');
   $('app').style.display='none'; $('loginPage').style.display='flex';
   $('loginEmail').value=''; $('loginPassword').value='';
+  setTimeout(function(){ location.reload(); },400);      // sai de vez: nenhuma informação do usuário anterior fica na memória
 }
 
 /* ───────── gestão de usuários (somente master) ───────── */
@@ -9921,7 +9928,8 @@ async function enviar(){
   try{
     var r=await fetch(GS_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
     var j=await r.json();
-    if(!j||!j.success) throw new Error((j&&j.error)||'O servidor não confirmou o envio. Verifique se o script do Google foi atualizado.');
+    if(j&&j.error==='sem-corpo') throw new Error('O Google não recebeu os dados do formulário (POST). Avise o administrador.');
+    if(!j||!j.success) throw new Error((j&&(j.message||j.error))||'O servidor não confirmou o envio. Verifique se o script do Google foi atualizado.');
     P.lista.unshift(j.record); try{ gsCache['padronizacoes']=null; }catch(e){}
     fechaForm(); renderPagina(); atualizaBadge();
     if(j.email&&j.email.ok) toastMsg('✅ Solicitação '+j.id+' enviada! E-mail disparado com cópia para você e para os administradores.');
