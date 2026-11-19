@@ -1442,7 +1442,8 @@ body.vn-solicitante #sidebar .nav-section:not(.nav-sec-padron){display:none!impo
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
 'use strict';
-var SKEY='fgSess', MASTER='golfettojunior1@gmail.com';
+var SKEY='fgSess';
+function ehMaster(u){ return !!u&&(u.isCreator===true||String(u.isCreator).toLowerCase()==='true'); }
 var PUB={test:1,confirmOCReceipt:1,markOCRead:1,login:1,register:1};
 var SOL_OK={me:1,logout:1,updateProfile:1,registrarPadronizacao:1,test:1};
 var sess=null, expirando=false, listaCache=[], ultimoEmail='';
@@ -1640,16 +1641,16 @@ async function updateUser(id,up){
 
 async function renderUsuarios(){
   var tbody=$('usuarios-body'); if(!tbody) return;
-  if(!currentUser||currentUser.email!==MASTER){
+  if(!currentUser||!ehMaster(currentUser)){
     tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:30px">⛔ Acesso restrito ao administrador master.</td></tr>'; return;
   }
   var thead=tbody.closest('table')&&tbody.closest('table').querySelector('thead tr');
   if(thead) thead.innerHTML='<th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Ações</th>';
   var us=await listUsers();
   tbody.innerHTML=us.map(function(u){
-    var m=u.email===MASTER, ap=String(u.status).toLowerCase()==='approved';
+    var m=ehMaster(u), ap=String(u.status).toLowerCase()==='approved';
     return '<tr><td><b>'+esc(u.name||'—')+'</b>'+(m?'<span class="badge badge-red" style="margin-left:6px">👑 Master</span>':'')+'</td><td class="dim">'+esc(u.email||'—')+'</td>'+
-      '<td>'+(window.vnPerfilCell?window.vnPerfilCell(u,MASTER):esc(u.role))+'</td>'+
+      '<td>'+(window.vnPerfilCell?window.vnPerfilCell(u):esc(u.role))+'</td>'+
       '<td><span class="badge '+(ap?'badge-green':'badge-yellow')+'">'+(ap?'✅ Aprovado':'⏳ Pendente')+'</span></td>'+
       '<td style="display:flex;gap:6px;flex-wrap:wrap">'+
         (!m&&!ap?'<button class="btn btn-sm btn-primary" onclick="aprovarUsuario(\''+esc(u.id)+'\')">✅ Aprovar</button>':'')+
@@ -5403,8 +5404,8 @@ function showApp() {
   updateBadges();
   updateOrdersBadge();
   // Menu Usuários: visível SOMENTE para o administrador master
-  const MASTER_EMAIL = 'golfettojunior1@gmail.com';
-  if(currentUser?.email === MASTER_EMAIL) {
+  const MASTER_EMAIL = ''; // (não usado: o master vem da coluna isCreator)
+  if(currentUser?.isCreator === 'true' || currentUser?.isCreator === true) {
     const adminSec=document.getElementById('nav-sec-admin');
     const adminBtn=document.getElementById('nav-btn-usuarios');
     if(adminSec) adminSec.style.display='block';
@@ -6632,14 +6633,14 @@ function reativarEntrega(nfId){
 // ── PERFIL DO USUÁRIO ─────────────────────────────────────────────────────────
 function abrirModalPerfil(){
   if(!currentUser) return;
-  const MASTER_EMAIL = 'golfettojunior1@gmail.com';
+  const MASTER_EMAIL = ''; // (não usado: o master vem da coluna isCreator)
   document.getElementById('perfil-nome').value = currentUser.name || '';
   document.getElementById('perfil-email').value = currentUser.email || '';
   document.getElementById('perfil-senha').value = '';
   document.getElementById('perfil-senha2').value = '';
   document.getElementById('perfil-error').style.display = 'none';
   const masterInfo = document.getElementById('perfil-master-info');
-  if(masterInfo) masterInfo.style.display = currentUser.email === MASTER_EMAIL ? 'block' : 'none';
+  if(masterInfo) masterInfo.style.display = (currentUser.isCreator === 'true' || currentUser.isCreator === true) ? 'block' : 'none';
   document.getElementById('modal-perfil').classList.add('open');
 }
 
@@ -9711,13 +9712,13 @@ window.OCI={tog:function(f,v){ if(S.ocs[f]) S.ocs[f].aberto=v; },abrir:abrir,fec
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
 'use strict';
-var MASTER='golfettojunior1@gmail.com';
+function ehMestre(u){ return !!u&&(u.isCreator===true||String(u.isCreator).toLowerCase()==='true'); }
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function semAcento(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 function usuario(){ try{ return (typeof currentUser!=='undefined'&&currentUser)||null; }catch(e){ return null; } }
 function ehSolicitante(){ var u=usuario(); return !!u&&u.role==='solicitante'; }
-function ehAdmin(){ var u=usuario(); return !!u&&(u.role==='admin'||u.email===MASTER); }
+function ehAdmin(){ var u=usuario(); return !!u&&(u.role==='admin'||ehMestre(u)); }
 function produtos(){ try{ return (typeof products!=='undefined'&&products)||window.products||[]; }catch(e){ return window.products||[]; } }
 function fmtDataHora(iso){ var d=new Date(iso); if(isNaN(d)) return ''; return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
 function toastMsg(m,t){ try{ toast(m,t||'success'); }catch(e){ alert(m); } }
@@ -9725,8 +9726,8 @@ function toastMsg(m,t){ try{ toast(m,t||'success'); }catch(e){ alert(m); } }
 /* ───────────── rótulos de perfil (cadastro e tela de usuários) ───────────── */
 function rotuloPerfil(r){ return r==='admin'?'Admin':(r==='solicitante'?'Solicitante':'Usuário'); }
 window.vnRoleLabel=rotuloPerfil;
-window.vnPerfilCell=function(u,master){
-  if(u.email===master) return '<span class="badge badge-blue">Admin</span>';
+window.vnPerfilCell=function(u){
+  if(ehMestre(u)) return '<span class="badge badge-blue">Admin</span>';
   var o=function(v,t){return '<option value="'+v+'"'+(u.role===v||(!u.role&&v==='user')?' selected':'')+'>'+t+'</option>';};
   return '<select class="form-input" style="padding:3px 6px;font-size:.78rem;min-width:130px" onchange="vnMudarPerfil(\''+u.id+'\',this.value)">'+o('solicitante','Solicitante (setor)')+o('user','Usuário')+o('admin','Admin')+'</select>'+
          (u.role==='solicitante'?'<div style="font-size:.72rem;color:var(--text3);margin-top:3px;cursor:pointer" onclick="vnMudarSetor(\''+u.id+'\',\''+esc(u.setor||'').replace(/\\/g,'')+'\')">🏷️ '+esc(u.setor||'definir setor')+'</div>':'');
